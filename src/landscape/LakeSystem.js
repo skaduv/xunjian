@@ -99,42 +99,43 @@ function shortestDistanceToIslands(px, pz) {
 
 /**
  * 夜间/暮光临水发光建筑、门廊、拱桥、六角亭与栈桥的解析倒影发射带定义
+ * 严格收紧在贴近建筑岸线 2–16m 范围，令中心开阔湖面保持沉静深邃的夜蓝镜面感；
  * 仅在初始化烘焙进 RGBA 场贴图的 B/A 通道，运行期零循环、零 PointLight！
  */
 const NIGHT_REFLECTION_EMITTERS = [
-  // 1. 中央 32m 三层通高木格栅大门廊（北岸主视觉核心暖金倒影）
-  { type: 'strip', ax: 10, az: -56, bx: 42, bz: -56, dx: 0, dz: 1, reach: 38, sideSpread: 11, intensity: 1.05, warm: 1.0 },
+  // 1. 中央 32m 三层通高木格栅大门廊（北岸主视觉温润琥珀倒影，最远 16m）
+  { type: 'strip', ax: 10, az: -56, bx: 42, bz: -56, dx: 0, dz: 1, reach: 16.0, sideSpread: 4.5, intensity: 0.92, warm: 1.0 },
   // 2. W5_N 西扶梯厅 & E1 东扶梯厅北岸临水立面
-  { type: 'strip', ax: -8, az: -50, bx: 10, bz: -56, dx: 0.25, dz: 0.97, reach: 28, sideSpread: 9, intensity: 0.80, warm: 0.94 },
-  { type: 'strip', ax: 42, az: -56, bx: 56, bz: -54, dx: -0.14, dz: 0.99, reach: 28, sideSpread: 9, intensity: 0.80, warm: 0.94 },
+  { type: 'strip', ax: -8, az: -50, bx: 10, bz: -56, dx: 0.25, dz: 0.97, reach: 13.5, sideSpread: 4.0, intensity: 0.72, warm: 0.94 },
+  { type: 'strip', ax: 42, az: -56, bx: 56, bz: -54, dx: -0.14, dz: 0.99, reach: 13.5, sideSpread: 4.0, intensity: 0.72, warm: 0.94 },
   // 3. 西五楼南段多功能中庭与亲水柚木平台
-  { type: 'strip', ax: -36, az: -29, bx: -8, bz: -30, dx: 0, dz: 1, reach: 26, sideSpread: 9, intensity: 0.84, warm: 0.92 },
+  { type: 'strip', ax: -36, az: -29, bx: -8, bz: -30, dx: 0, dz: 1, reach: 13.0, sideSpread: 4.0, intensity: 0.74, warm: 0.92 },
   // 4. 西三楼 & 西二西三连桥临湖东立面
-  { type: 'strip', ax: -47, az: -25, bx: -47.5, bz: 50, dx: 1, dz: 0, reach: 27, sideSpread: 10, intensity: 0.74, warm: 0.84 },
+  { type: 'strip', ax: -47, az: -25, bx: -47.5, bz: 50, dx: 1, dz: 0, reach: 12.5, sideSpread: 4.0, intensity: 0.65, warm: 0.86 },
   // 5. 西二楼实验楼与临湖咖啡吧露台
-  { type: 'strip', ax: -126, az: 54, bx: -48, bz: 54, dx: 0, dz: 1, reach: 28, sideSpread: 10, intensity: 0.86, warm: 0.95 },
+  { type: 'strip', ax: -126, az: 54, bx: -48, bz: 54, dx: 0, dz: 1, reach: 14.0, sideSpread: 4.0, intensity: 0.76, warm: 0.95 },
   // 6. 西一楼实验室临湖东立面
-  { type: 'strip', ax: -133, az: 55, bx: -133, bz: 95, dx: 1, dz: 0, reach: 24, sideSpread: 9, intensity: 0.68, warm: 0.82 },
+  { type: 'strip', ax: -133, az: 55, bx: -133, bz: 95, dx: 1, dz: 0, reach: 11.5, sideSpread: 3.5, intensity: 0.60, warm: 0.84 },
   // 7. 东二楼实验楼临湖西立面
-  { type: 'strip', ax: 56, az: -52, bx: 56, bz: 12, dx: -1, dz: 0, reach: 26, sideSpread: 9, intensity: 0.76, warm: 0.86 },
+  { type: 'strip', ax: 56, az: -52, bx: 56, bz: 12, dx: -1, dz: 0, reach: 12.5, sideSpread: 4.0, intensity: 0.66, warm: 0.88 },
   // 8. 东侧三层通高门洞
-  { type: 'strip', ax: 55, az: 12, bx: 54.5, bz: 34, dx: -1, dz: 0, reach: 28, sideSpread: 9, intensity: 0.86, warm: 0.96 },
+  { type: 'strip', ax: 55, az: 12, bx: 54.5, bz: 34, dx: -1, dz: 0, reach: 14.0, sideSpread: 4.0, intensity: 0.76, warm: 0.96 },
   // 9. 东三楼临湖半岛展厅/体育馆（西、南、东三面临水）
-  { type: 'strip', ax: 54, az: 35, bx: 54, bz: 79, dx: -1, dz: 0, reach: 27, sideSpread: 10, intensity: 0.86, warm: 0.92 },
-  { type: 'strip', ax: 56, az: 80, bx: 116, bz: 81, dx: 0, dz: 1, reach: 30, sideSpread: 11, intensity: 0.90, warm: 0.90 },
-  { type: 'strip', ax: 118, az: 36, bx: 118, bz: 78, dx: 1, dz: 0, reach: 22, sideSpread: 8, intensity: 0.72, warm: 0.88 },
-  // 10. 西南钢拱肋玻璃拱桥（桥下冷白/香槟金弧光倒影）
-  { type: 'omniSeg', ax: -179, az: 95, bx: -161, bz: 122, reach: 18, intensity: 0.94, warm: 0.44 },
+  { type: 'strip', ax: 54, az: 35, bx: 54, bz: 79, dx: -1, dz: 0, reach: 13.5, sideSpread: 4.0, intensity: 0.76, warm: 0.92 },
+  { type: 'strip', ax: 56, az: 80, bx: 116, bz: 81, dx: 0, dz: 1, reach: 15.0, sideSpread: 4.5, intensity: 0.80, warm: 0.90 },
+  { type: 'strip', ax: 118, az: 36, bx: 118, bz: 78, dx: 1, dz: 0, reach: 11.0, sideSpread: 3.5, intensity: 0.62, warm: 0.88 },
+  // 10. 西南钢拱肋玻璃拱桥（桥下冷白/暖香槟弧光倒影）
+  { type: 'omniSeg', ax: -179, az: 95, bx: -161, bz: 122, reach: 10.5, intensity: 0.82, warm: 0.48 },
   // 11. 东岸亲水木栈桥（桥下柔和线性倒影）
-  { type: 'omniSeg', ax: 103, az: 23, bx: 152, bz: 4, reach: 13, intensity: 0.66, warm: 0.82 },
-  // 12. 东岸六角木吊顶临湖亭（东水渠暖金灯笼倒影）
-  { type: 'point', cx: 133, cz: -24, reach: 26, intensity: 0.98, warm: 1.0 },
-  // 13. 南岸与东岸环湖步道庭院柱灯微弱金辉倒影
-  { type: 'point', cx: 60, cz: 148, reach: 16, intensity: 0.50, warm: 1.0 },
-  { type: 'point', cx: -18, cz: 157, reach: 16, intensity: 0.50, warm: 1.0 },
-  { type: 'point', cx: -88, cz: 122, reach: 16, intensity: 0.50, warm: 1.0 },
-  { type: 'point', cx: 132, cz: -6, reach: 15, intensity: 0.46, warm: 1.0 },
-  { type: 'point', cx: 164, cz: 39, reach: 16, intensity: 0.48, warm: 1.0 },
+  { type: 'omniSeg', ax: 103, az: 23, bx: 152, bz: 4, reach: 7.5, intensity: 0.54, warm: 0.84 },
+  // 12. 东岸六角木吊顶临湖亭（东水渠温润暖金灯笼倒影）
+  { type: 'point', cx: 133, cz: -24, reach: 15.5, intensity: 0.92, warm: 1.0 },
+  // 13. 南岸与东岸环湖步道庭院柱灯克制金辉倒影
+  { type: 'point', cx: 60, cz: 148, reach: 9.5, intensity: 0.36, warm: 1.0 },
+  { type: 'point', cx: -18, cz: 157, reach: 9.5, intensity: 0.36, warm: 1.0 },
+  { type: 'point', cx: -88, cz: 122, reach: 9.5, intensity: 0.36, warm: 1.0 },
+  { type: 'point', cx: 132, cz: -6, reach: 9.0, intensity: 0.34, warm: 1.0 },
+  { type: 'point', cx: 164, cz: 39, reach: 9.5, intensity: 0.34, warm: 1.0 },
 ];
 
 function sampleNightReflectionAt(px, pz) {
@@ -163,37 +164,40 @@ function sampleNightReflectionAt(px, pz) {
       const vz = pz - qz;
       const forward = vx * em.dx + vz * em.dz;
 
-      if (forward > -2.5 && forward < em.reach && overflow < em.sideSpread * 2.2) {
+      if (forward > -1.4 && forward < em.reach && overflow < em.sideSpread * 1.8) {
         const fwdNorm = clamp(Math.max(0, forward) / em.reach, 0, 1);
-        const fwdFalloff = Math.pow(1 - fwdNorm, 1.85) * smoothstep(-2.5, 0.8, forward);
+        const fwdFalloff = Math.pow(1 - fwdNorm, 2.35) * smoothstep(-1.4, 1.2, forward);
         const sideFalloff = 1 - smoothstep(0, em.sideSpread * 1.45, overflow);
-        // 建筑窗格横向韵律微调制（模拟真实三层窗带倒影疏密层次）
-        const bayWave = 0.84 + 0.16 * Math.sin(clampedAlong * 0.65);
-        contrib = em.intensity * fwdFalloff * sideFalloff * bayWave;
+        // 柔和无规律的建筑开间亮度微起伏（消除等距栏栅感）
+        const organicBay =
+          0.90 +
+          0.06 * Math.sin(clampedAlong * 0.23 + i * 1.7) +
+          0.04 * Math.cos(clampedAlong * 0.59 - i * 0.9);
+        contrib = em.intensity * fwdFalloff * sideFalloff * organicBay;
       }
     } else if (em.type === 'omniSeg') {
       const d = Math.sqrt(distToSegmentSq(px, pz, em.ax, em.az, em.bx, em.bz));
       if (d < em.reach) {
         const t = 1 - d / em.reach;
-        contrib = em.intensity * t * t;
+        contrib = em.intensity * Math.pow(t, 2.3);
       }
     } else {
       const d = Math.hypot(px - em.cx, pz - em.cz);
       if (d < em.reach) {
         const t = 1 - d / em.reach;
-        contrib = em.intensity * t * t;
+        contrib = em.intensity * Math.pow(t, 2.3);
       }
     }
 
     if (contrib > 0.001) {
       if (contrib > maxMask) maxMask = contrib;
-      accumMask += contrib * 0.45;
+      accumMask += contrib * 0.35;
       warmWeighted += contrib * em.warm;
     }
   }
 
-  const totalMask = clamp(maxMask * 0.72 + Math.min(1.0, accumMask) * 0.45, 0, 1);
-  const warmMix = accumMask > 1e-4 ? clamp(warmWeighted / (accumMask / 0.45), 0, 1) : 0.9;
+  const totalMask = clamp(maxMask * 0.78 + Math.min(0.85, accumMask) * 0.34, 0, 1);
+  const warmMix = accumMask > 1e-4 ? clamp(warmWeighted / (accumMask / 0.35), 0, 1) : 0.9;
   return [totalMask, warmMix];
 }
 
@@ -623,27 +627,52 @@ function createOpticalWaterMaterial(waterNormalTex, shoreField) {
           return minD;
         }
 
+        float lake_hash21( vec2 p ) {
+          p = fract( p * vec2( 123.34, 456.21 ) );
+          p += dot( p, p + 45.32 );
+          return fract( p.x * p.y );
+        }
+
+        float lake_vnoise( vec2 p ) {
+          vec2 i = floor( p );
+          vec2 f = fract( p );
+          vec2 u = f * f * ( 3.0 - 2.0 * f );
+          float a = lake_hash21( i );
+          float b = lake_hash21( i + vec2( 1.0, 0.0 ) );
+          float c = lake_hash21( i + vec2( 0.0, 1.0 ) );
+          float d = lake_hash21( i + vec2( 1.0, 1.0 ) );
+          return mix( mix( a, b, u.x ), mix( c, d, u.x ), u.y );
+        }
+
         vec2 lake_sampleRipples( vec2 xz, float t, float shoreDist, float islDist, vec2 islDir ) {
-          // 1. 宏观丝绸轻澜
-          vec2 uv1 = xz * 0.0165 + vec2( t * 0.012, t * 0.0085 );
+          // 1. 4 组非正交、非整倍频且经有机噪波相位弯曲的自然波列（彻底杜绝棋盘格/华夫饼规则感）
+          float phaseWarp = lake_vnoise( xz * 0.065 + vec2( t * 0.035, -t * 0.025 ) ) * 2.6;
+          vec2 d1 = vec2( 0.9816, 0.1908 );   // 11°
+          vec2 d2 = vec2( 0.6820, 0.7314 );   // 47°
+          vec2 d3 = vec2( -0.3907, 0.9205 );  // 113°
+          vec2 d4 = vec2( -0.9336, 0.3584 );  // 159°
+
+          float w1 = cos( dot( xz, d1 ) * 0.23 + phaseWarp * 0.65 - t * 0.68 ) * 0.34;
+          float w2 = cos( dot( xz, d2 ) * 0.41 - phaseWarp * 0.85 + t * 0.91 ) * 0.27;
+          float w3 = cos( dot( xz, d3 ) * 0.67 + phaseWarp * 1.10 - t * 1.14 ) * 0.22;
+          float w4 = cos( dot( xz, d4 ) * 1.19 - phaseWarp * 0.95 + t * 1.42 ) * 0.17;
+          vec2 organicSlope = d1 * w1 + d2 * w2 + d3 * w3 + d4 * w4;
+
+          // 2. 叠加两层大倾角错位细微法线贴图（柔和毛细细节，无周期感）
+          vec2 uv1 = xz * 0.0155 + vec2( t * 0.010, t * 0.007 );
           vec2 n1 = texture2D( uWaterNormalMap, uv1 ).xy * 2.0 - 1.0;
 
-          // 2. 错角旋转（37°）逆向中频细波，彻底消除周期平铺感
           vec2 rotXz = vec2( xz.x * 0.7986 - xz.y * 0.6018, xz.x * 0.6018 + xz.y * 0.7986 );
-          vec2 uv2 = rotXz * 0.036 + vec2( -t * 0.0145, t * 0.0105 );
+          vec2 uv2 = rotXz * 0.039 + vec2( -t * 0.013, t * 0.0095 );
           vec2 n2Raw = texture2D( uWaterNormalMap, uv2 ).xy * 2.0 - 1.0;
           vec2 n2 = vec2( n2Raw.x * 0.7986 + n2Raw.y * 0.6018, -n2Raw.x * 0.6018 + n2Raw.y * 0.7986 );
 
-          // 3. 近景纤细毛细涟漪（低权重，无锯齿噪点）
-          vec2 uv3 = xz * 0.082 + vec2( t * 0.018, -t * 0.013 );
-          vec2 n3 = texture2D( uWaterNormalMap, uv3 ).xy * 2.0 - 1.0;
-
           float calmNearShore = mix( 0.42, 1.0, smoothstep( 0.0, 2.2, shoreDist ) );
-          vec2 slope = ( n1 * 0.48 + n2 * 0.36 + n3 * 0.16 ) * ( 0.24 * calmNearShore );
+          vec2 slope = ( organicSlope * 0.115 + ( n1 * 0.55 + n2 * 0.45 ) * 0.135 ) * calmNearShore;
 
-          // 4. 浮岛周边极柔和同心水纹
+          // 3. 浮岛周边极柔和同心水纹
           float ringEnv = exp( -max( 0.0, islDist ) * 0.78 ) * smoothstep( 0.0, 0.25, islDist );
-          float ringWave = cos( max( 0.0, islDist ) * 4.4 - t * 1.35 ) * ringEnv * 0.042;
+          float ringWave = cos( max( 0.0, islDist ) * 4.4 - t * 1.35 ) * ringEnv * 0.036;
           slope += islDir * ringWave;
 
           return slope;
@@ -744,11 +773,11 @@ function createOpticalWaterMaterial(waterNormalTex, shoreField) {
         meniscusVis = mix( meniscusVis, 0.22, uNightFactor );
         outgoingLight = mix( outgoingLight, uMeniscusCol, meniscusMask * meniscusVis );
 
-        // 4. 暮光/夜间建筑、大门廊、西南拱桥与东岸六角亭波光倒影（纯解析，0 额外光源）
-        float nightReflDrive = clamp( smoothstep( 0.35, 1.0, uDuskFactor ) * 0.48 + uNightFactor * 1.05, 0.0, 1.15 );
+        // 4. 暮光/夜间近岸建筑、大门廊、西南拱桥与东岸六角亭柔润丝缕倒影（2–16m 贴岸衰减，零网格/零过曝）
+        float nightReflDrive = clamp( smoothstep( 0.35, 1.0, uDuskFactor ) * 0.34 + uNightFactor * 0.96, 0.0, 1.0 );
         if ( nightReflDrive > 0.005 ) {
           vec2 reflUv = clamp(
-            lakeSdfUv + vec2( lakeWaveSlope.x * 0.028, lakeWaveSlope.y * 0.044 ),
+            lakeSdfUv + vec2( lakeWaveSlope.x * 0.011, lakeWaveSlope.y * 0.015 ),
             vec2( 0.001 ),
             vec2( 0.999 )
           );
@@ -756,18 +785,32 @@ function createOpticalWaterMaterial(waterNormalTex, shoreField) {
           float reflMask = reflSample.b;
           float warmWeight = reflSample.a;
 
-          // 波浪切面拉长的水平粼光条纹与闪烁碎金
-          float barA = 0.5 + 0.5 * sin( lakeXz.x * 0.42 + lakeXz.y * 1.28 + lakeWaveSlope.x * 18.0 - uTime * 1.25 );
-          float barB = 0.5 + 0.5 * cos( lakeXz.x * 0.78 - lakeXz.y * 0.86 + lakeWaveSlope.y * 21.0 + uTime * 0.92 );
-          float shimmer = mix( 0.46, 1.52, smoothstep( 0.16, 0.90, barA * 0.58 + barB * 0.42 ) );
-          float sparkle = pow( clamp( abs( lakeWaveSlope.x * 4.5 + lakeWaveSlope.y * 5.2 ), 0.0, 1.0 ), 2.0 ) * 0.55;
+          if ( reflMask > 0.004 ) {
+            // 沿视线横向拉伸的非正交多频有机水面细碎光丝（彻底消除正交 sin*cos 棋盘格）
+            vec2 viewHoriz = normalize( lakeViewDir.xz + vec2( 1e-4, 0.0 ) );
+            vec2 viewPerp = vec2( -viewHoriz.y, viewHoriz.x );
+            float acrossView = dot( lakeXz, viewPerp );
+            float alongView = dot( lakeXz, viewHoriz );
 
-          vec3 warmGold = vec3( 1.0, 0.50, 0.14 );
-          vec3 coolArch = vec3( 0.68, 0.82, 1.0 );
-          vec3 reflCol = mix( coolArch, warmGold, warmWeight );
-          float fresnelBoost = mix( 0.68, 1.45, lakeFresnel );
+            float ribbonWarp = lake_vnoise( lakeXz * 0.13 + vec2( uTime * 0.055, -uTime * 0.038 ) ) * 2.9;
+            float f1 = sin( alongView * 1.38 + acrossView * 0.17 + ribbonWarp + lakeWaveSlope.y * 7.5 - uTime * 0.88 );
+            float f2 = sin( alongView * 2.53 - acrossView * 0.24 + ribbonWarp * 1.41 + lakeWaveSlope.x * 8.2 + uTime * 1.21 );
+            float f3 = sin( alongView * 0.74 + acrossView * 0.09 - ribbonWarp * 0.78 - uTime * 0.56 );
+            float f4 = sin( alongView * 3.85 + acrossView * 0.31 - ribbonWarp * 1.15 + uTime * 1.54 );
+            float calmPatch = lake_vnoise( vec2( acrossView * 0.075, alongView * 0.15 ) + vec2( 0.0, -uTime * 0.065 ) );
 
-          outgoingLight += reflCol * reflMask * ( shimmer + sparkle ) * fresnelBoost * nightReflDrive * 0.72;
+            float filament = 0.5 + 0.5 * ( f1 * 0.40 + f2 * 0.28 + f3 * 0.20 + f4 * 0.12 );
+            float silkyMod = mix( 0.58, 1.14, smoothstep( 0.12, 0.92, filament * 0.66 + calmPatch * 0.34 ) );
+            float fineSilkGlint = pow( smoothstep( 0.60, 0.98, filament * ( 0.65 + 0.55 * calmPatch ) ), 2.2 ) * 0.22;
+
+            // 温润建筑琥珀香槟金（避免刺眼饱和亮橙），微带柔和菲涅尔增益
+            vec3 warmAmber = vec3( 0.95, 0.61, 0.25 );
+            vec3 coolArch = vec3( 0.66, 0.80, 0.98 );
+            vec3 reflCol = mix( coolArch, warmAmber, warmWeight );
+            float fresnelBoost = mix( 0.72, 1.18, lakeFresnel );
+
+            outgoingLight += reflCol * reflMask * ( silkyMod + fineSilkGlint ) * fresnelBoost * nightReflDrive * 0.34;
+          }
         }
 
         diffuseColor.a = clamp( diffuseColor.a + lakeFresnel * 0.16 + meniscusMask * 0.10, 0.0, 0.995 );

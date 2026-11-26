@@ -323,9 +323,17 @@ export class SpatialAnchors {
         continue;
       }
 
-      const inFront = pos.visible !== false && (pos.ndcZ === undefined || (pos.ndcZ >= -1 && pos.ndcZ <= 1));
+      const behindCamera =
+        typeof pos.behindCamera === 'boolean'
+          ? pos.behindCamera
+          : typeof pos.inFront === 'boolean'
+            ? !pos.inFront
+            : typeof pos.ndcZ === 'number' && pos.ndcZ > 1;
+      const inFront = !behindCamera;
+      const inClipRange = pos.ndcZ === undefined || (pos.ndcZ >= -1 && pos.ndcZ <= 1);
       const inSafeBounds =
         inFront &&
+        inClipRange &&
         pos.x >= safeLeft - 12 &&
         pos.x <= safeRight + 12 &&
         pos.y >= safeTop - 12 &&
@@ -357,6 +365,7 @@ export class SpatialAnchors {
             vw,
             vh,
             inFront,
+            behindCamera,
           });
         }
       }
@@ -402,23 +411,52 @@ export class SpatialAnchors {
 
     const cx = (bounds.safeLeft + bounds.safeRight) * 0.5;
     const cy = (bounds.safeTop + bounds.safeBottom) * 0.5;
-    let dx = pos.x - cx;
-    let dy = pos.y - cy;
-    if (!bounds.inFront) {
-      dx = -dx;
-      dy = -dy;
-    }
-    if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) dx = 1;
+    const minChipX = Math.min(cx, bounds.safeLeft + 62);
+    const maxChipX = Math.max(cx, bounds.safeRight - 62);
+    const minChipY = Math.min(cy, bounds.safeTop + 16);
+    const maxChipY = Math.max(cy, bounds.safeBottom - 16);
 
-    const halfW = Math.max(80, (bounds.safeRight - bounds.safeLeft) * 0.5 - 66);
-    const halfH = Math.max(60, (bounds.safeBottom - bounds.safeTop) * 0.5 - 22);
-    const scale = Math.min(
-      Math.abs(dx) > 0.001 ? halfW / Math.abs(dx) : Infinity,
-      Math.abs(dy) > 0.001 ? halfH / Math.abs(dy) : Infinity
-    );
-    const clampedX = cx + dx * scale;
-    const clampedY = cy + dy * scale;
-    const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+    let clampedX;
+    let clampedY;
+    let angleDeg;
+
+    const hasApiEdge =
+      typeof pos.clampedX === 'number' &&
+      typeof pos.clampedY === 'number' &&
+      typeof pos.edgeAngle === 'number' &&
+      Number.isFinite(pos.clampedX) &&
+      Number.isFinite(pos.clampedY) &&
+      Number.isFinite(pos.edgeAngle) &&
+      (bounds.behindCamera ||
+        pos.clamped === true ||
+        Math.abs(pos.clampedX - pos.x) > 0.5 ||
+        Math.abs(pos.clampedY - pos.y) > 0.5);
+
+    if (hasApiEdge) {
+      // 直接复用 CampusTwinAPI 基于相机视空间 (viewPos.z > 0) 精确计算的贴边坐标与方位角
+      clampedX = Math.max(minChipX, Math.min(maxChipX, pos.clampedX));
+      clampedY = Math.max(minChipY, Math.min(maxChipY, pos.clampedY));
+      angleDeg = pos.edgeAngle;
+    } else {
+      let dx = pos.x - cx;
+      let dy = pos.y - cy;
+      // 仅当目标真正位于相机后方时才翻转 NDC 投影方向（切勿对相机前方的视口外目标取反）
+      if (bounds.behindCamera) {
+        dx = -dx;
+        dy = -dy;
+      }
+      if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) dx = 1;
+
+      const halfW = Math.max(60, (maxChipX - minChipX) * 0.5);
+      const halfH = Math.max(48, (maxChipY - minChipY) * 0.5);
+      const scale = Math.min(
+        Math.abs(dx) > 0.001 ? halfW / Math.abs(dx) : Infinity,
+        Math.abs(dy) > 0.001 ? halfH / Math.abs(dy) : Infinity
+      );
+      clampedX = cx + dx * scale;
+      clampedY = cy + dy * scale;
+      angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+    }
 
     chip.el.style.transform = `translate3d(${Math.round(clampedX)}px, ${Math.round(clampedY)}px, 0)`;
     chip.arrowEl.style.transform = `rotate(${angleDeg.toFixed(1)}deg)`;
@@ -429,8 +467,14 @@ export class SpatialAnchors {
     const ref = this.selectedRef;
     const ent = ref ? this.entities.get(ref.id) : null;
     const pos = ref ? positions[ref.id] : null;
+    const behindCamera =
+      typeof pos?.behindCamera === 'boolean'
+        ? pos.behindCamera
+        : typeof pos?.inFront === 'boolean'
+          ? !pos.inFront
+          : typeof pos?.ndcZ === 'number' && pos.ndcZ > 1;
 
-    if (!ent || !pos || pos.visible === false || (pos.ndcZ !== undefined && (pos.ndcZ < -1 || pos.ndcZ > 1))) {
+    if (!ent || !pos || behindCamera || (pos.ndcZ !== undefined && (pos.ndcZ < -1 || pos.ndcZ > 1))) {
       this.leaderLineEl.style.display = 'none';
       this.leaderDotEl.style.display = 'none';
       this.leaderCardEl.classList.remove('is-visible');

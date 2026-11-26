@@ -651,7 +651,7 @@ function buildHyperbolicMembranePavilion(steelMat, warmAccentMat, landmarkPoolMa
 /**
  * 5. 东岸六角木吊顶临湖亭（复刻 04_IOPLY_湖滨会议中心夜景 暖金木顶透光神韵）与无缝双岸亲水栈桥
  */
-function buildEastLakesidePavilionAndPier(teakMat, glassMat, steelMat, warmAccentMat, landmarkPoolMat) {
+function buildEastLakesidePavilionAndPier(teakMat, glassMat, steelMat, warmAccentMat, landmarkPoolMat, maxAnisotropy = 4) {
   const grp = new THREE.Group();
   grp.name = 'EastShore_PavilionAndPier';
 
@@ -660,7 +660,13 @@ function buildEastLakesidePavilionAndPier(teakMat, glassMat, steelMat, warmAccen
   const radius = 9.4;
 
   const stoneMat = new THREE.MeshStandardMaterial({ color: '#ebeef3', roughness: 0.58 });
-  const base = new THREE.Mesh(new THREE.CylinderGeometry(radius + 1.6, radius + 2.2, 0.45, 6), stoneMat);
+  const pavBaseMat = new THREE.MeshStandardMaterial({
+    color: '#ebeef3',
+    emissive: new THREE.Color('#a86220'),
+    emissiveIntensity: 0.0,
+    roughness: 0.55,
+  });
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(radius + 1.6, radius + 2.2, 0.45, 6), pavBaseMat);
   base.position.set(px, 0.22, pz);
   base.receiveShadow = true;
   grp.add(base);
@@ -674,13 +680,29 @@ function buildEastLakesidePavilionAndPier(teakMat, glassMat, steelMat, warmAccen
   }
 
   const pavGlassMat = glassMat.clone();
-  pavGlassMat.emissive = new THREE.Color('#ffae45');
+  pavGlassMat.emissive = new THREE.Color('#ffba52');
   pavGlassMat.emissiveIntensity = 0.0;
   const glassCore = new THREE.Mesh(new THREE.CylinderGeometry(radius - 2.4, radius - 2.4, 4.2, 6), pavGlassMat);
   glassCore.position.set(px, 2.5, pz);
   grp.add(glassCore);
 
-  // 精工浅炭灰/瓷灰六角折面屋顶 + 温暖香槟橡木六角吊顶（夜景如湖滨会议中心般发出瑰丽暖金光辉）
+  // 亭内暖金建筑漫射内芯（日间隐藏，夜景通透发光如湖滨会议中心金色灯笼）
+  const pavInnerGlowMat = new THREE.MeshStandardMaterial({
+    color: '#ffedc8',
+    emissive: new THREE.Color('#ffae42'),
+    emissiveIntensity: 0.0,
+    roughness: 0.45,
+    transparent: true,
+    opacity: 0.0,
+    depthWrite: false,
+    visible: false,
+  });
+  const innerCore = new THREE.Mesh(new THREE.CylinderGeometry(radius - 3.6, radius - 3.3, 3.65, 6), pavInnerGlowMat);
+  innerCore.userData.noMerge = true;
+  innerCore.position.set(px, 2.38, pz);
+  grp.add(innerCore);
+
+  // 精工浅炭灰/瓷灰六角折面屋顶 + 温暖香槟橡木六角吊顶（夜景如 04_IOPLY_湖滨会议中心夜景 暖金木顶辉光）
   const roofCap = new THREE.Mesh(
     new THREE.ConeGeometry(radius + 2.6, 3.0, 6),
     new THREE.MeshStandardMaterial({ color: '#6b7582', roughness: 0.52, metalness: 0.22 })
@@ -692,43 +714,78 @@ function buildEastLakesidePavilionAndPier(teakMat, glassMat, steelMat, warmAccen
 
   const warmWoodMat = new THREE.MeshStandardMaterial({
     color: '#d5c3aa',
-    emissive: new THREE.Color('#cb741c'),
+    emissive: new THREE.Color('#e88a24'),
     emissiveIntensity: 0.0,
-    roughness: 0.48,
+    roughness: 0.46,
   });
-  const ceilingPlate = new THREE.Mesh(new THREE.CylinderGeometry(radius + 1.8, radius + 1.8, 0.16, 6), warmWoodMat);
-  ceilingPlate.position.set(px, 5.14, pz);
+  const ceilingPlate = new THREE.Mesh(new THREE.CylinderGeometry(radius + 2.15, radius + 2.05, 0.28, 6), warmWoodMat);
+  ceilingPlate.position.set(px, 5.08, pz);
   grp.add(ceilingPlate);
+
+  // 屋檐下缘外露六角暖金轮廓灯槽（高角度等轴测视角亦可清晰看见暖金木顶发光挑檐）
+  if (warmAccentMat) {
+    const eaveHalo = new THREE.Mesh(
+      new THREE.TorusGeometry(radius + 1.95, 0.095, 6, 6),
+      warmAccentMat
+    );
+    eaveHalo.rotation.x = Math.PI / 2;
+    eaveHalo.rotation.z = Math.PI / 6;
+    eaveHalo.position.set(px, 4.95, pz);
+    grp.add(eaveHalo);
+  }
 
   for (let i = 0; i < 6; i++) {
     const a = (i / 6) * Math.PI * 2;
-    const rib = new THREE.Mesh(new THREE.BoxGeometry(radius * 2.05, 0.22, 0.24), warmWoodMat);
-    rib.position.set(px, 5.0, pz);
+    const rib = new THREE.Mesh(new THREE.BoxGeometry(radius * 2.15, 0.24, 0.26), warmWoodMat);
+    rib.position.set(px, 4.94, pz);
     rib.rotation.y = a;
     grp.add(rib);
 
     // 沿六角木肋暗藏暖琥珀线性灯槽
     if (warmAccentMat) {
-      const ribLed = new THREE.Mesh(new THREE.BoxGeometry(radius * 1.82, 0.07, 0.12), warmAccentMat);
-      ribLed.position.set(px, 4.86, pz);
+      const ribLed = new THREE.Mesh(new THREE.BoxGeometry(radius * 1.95, 0.08, 0.14), warmAccentMat);
+      ribLed.position.set(px, 4.82, pz);
       ribLed.rotation.y = a;
       grp.add(ribLed);
     }
   }
 
-  // 六角亭中央穹顶暖金发光灯盘 + 石材台面羽化金光溢出
+  // 六角亭中央穹顶暖金发光灯盘 + 亭内石材台面与周边草坪双层柔和羽化暖光晕
   if (warmAccentMat) {
-    const crownGlow = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, 0.1, 6), warmAccentMat);
-    crownGlow.position.set(px, 4.94, pz);
+    const crownGlow = new THREE.Mesh(new THREE.CylinderGeometry(3.8, 3.8, 0.12, 6), warmAccentMat);
+    crownGlow.position.set(px, 4.9, pz);
     grp.add(crownGlow);
   }
-  if (landmarkPoolMat) {
-    const pavDeckPool = new THREE.Mesh(new THREE.PlaneGeometry(20.4, 20.4), landmarkPoolMat);
-    pavDeckPool.userData.noMerge = true;
-    pavDeckPool.rotation.x = -Math.PI / 2;
-    pavDeckPool.position.set(px, 0.465, pz);
-    grp.add(pavDeckPool);
-  }
+
+  const pavPoolTex = createFeatheredLightPoolTexture('255, 224, 152', '255, 156, 48', maxAnisotropy);
+  const pavDeckPoolMat = new THREE.MeshBasicMaterial({
+    map: pavPoolTex,
+    transparent: true,
+    opacity: 0.0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    visible: false,
+  });
+  const pavDeckPool = new THREE.Mesh(new THREE.PlaneGeometry(21.2, 21.2), pavDeckPoolMat);
+  pavDeckPool.userData.noMerge = true;
+  pavDeckPool.rotation.x = -Math.PI / 2;
+  pavDeckPool.position.set(px, 0.465, pz);
+  grp.add(pavDeckPool);
+
+  // 亭下外延草坪柔和羽化暖金漫射光晕（半径 18m 严控于湖岸线内侧，绝不悬空越入湖面）
+  const pavLawnPoolMat = new THREE.MeshBasicMaterial({
+    map: pavPoolTex,
+    transparent: true,
+    opacity: 0.0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    visible: false,
+  });
+  const pavLawnPool = new THREE.Mesh(new THREE.PlaneGeometry(36.0, 36.0), pavLawnPoolMat);
+  pavLawnPool.userData.noMerge = true;
+  pavLawnPool.rotation.x = -Math.PI / 2;
+  pavLawnPool.position.set(px, 0.095, pz);
+  grp.add(pavLawnPool);
 
   // 无缝双岸亲水栈桥（西端精准对接东侧消防道路与 E3 北露台，东端对接东岸环湖步道）
   const p1 = new THREE.Vector3(101.5, 0.2, 24);
@@ -783,7 +840,7 @@ function buildEastLakesidePavilionAndPier(teakMat, glassMat, steelMat, warmAccen
   pierGrp.add(pileInst);
   grp.add(pierGrp);
 
-  return { group: grp, warmWoodMat, pavGlassMat };
+  return { group: grp, warmWoodMat, pavGlassMat, pavInnerGlowMat, pavBaseMat, pavDeckPoolMat, pavLawnPoolMat };
 }
 
 /**
@@ -1061,12 +1118,23 @@ export function buildTerrainAndStructures(maxAnisotropy = 8) {
 
   const poolStoneMat = new THREE.MeshStandardMaterial({ color: '#edf0f5', roughness: 0.5 });
   const dayMirrorCol = new THREE.Color('#8fb9c7');
-  const nightMirrorCol = new THREE.Color('#09192b');
+  const nightMirrorCol = new THREE.Color('#163658');
   const mirrorWaterMat = new THREE.MeshStandardMaterial({
     color: '#8fb9c7',
+    emissive: new THREE.Color('#153456'),
+    emissiveIntensity: 0.0,
     roughness: 0.06,
     metalness: 0.24,
     envMapIntensity: 1.5,
+  });
+  const mirrorWarmReflectMat = new THREE.MeshBasicMaterial({
+    map: landmarkPoolTex,
+    color: '#ffd694',
+    transparent: true,
+    opacity: 0.0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    visible: false,
   });
   const hedgeMat = new THREE.MeshStandardMaterial({ color: '#9eb09e', roughness: 0.88 });
 
@@ -1082,11 +1150,22 @@ export function buildTerrainAndStructures(maxAnisotropy = 8) {
     mirror.position.set(px, 0.22, pz);
     group.add(mirror);
 
-    // 镜面水池内檐微光水下灯槽
+    // 夜间水面温柔暖光映衬层（呼应北迎宾大道礼仪路灯与中央门廊金光，彻底告别死黑水面）
+    const mirrorShimmer = new THREE.Mesh(new THREE.PlaneGeometry(7.8, 22.4), mirrorWarmReflectMat);
+    mirrorShimmer.userData.noMerge = true;
+    mirrorShimmer.rotation.x = -Math.PI / 2;
+    mirrorShimmer.position.set(px, 0.268, pz);
+    group.add(mirrorShimmer);
+
+    // 镜面水池四边内檐微光水下灯槽
     for (const s of [-1, 1]) {
-      const poolLed = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 22.8), warmAccentMat);
-      poolLed.position.set(px + s * 4.12, 0.25, pz);
-      group.add(poolLed);
+      const poolLedLong = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 22.8), warmAccentMat);
+      poolLedLong.position.set(px + s * 4.12, 0.25, pz);
+      group.add(poolLedLong);
+
+      const poolLedShort = new THREE.Mesh(new THREE.BoxGeometry(8.24, 0.06, 0.1), warmAccentMat);
+      poolLedShort.position.set(px, 0.25, pz + s * 11.48);
+      group.add(poolLedShort);
     }
 
     const hedgeOuter = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.88, 24.5), hedgeMat);
@@ -1114,7 +1193,14 @@ export function buildTerrainAndStructures(maxAnisotropy = 8) {
   group.add(membranePavilion.group);
 
   // 7. 东岸六角木吊顶临湖亭与无缝双岸亲水栈桥（含暖金木顶与栈桥双侧线形灯带）
-  const eastPavilion = buildEastLakesidePavilionAndPier(teakMat, glassMat, steelMat, warmAccentMat, landmarkPoolMat);
+  const eastPavilion = buildEastLakesidePavilionAndPier(
+    teakMat,
+    glassMat,
+    steelMat,
+    warmAccentMat,
+    landmarkPoolMat,
+    maxAnisotropy
+  );
   group.add(eastPavilion.group);
 
   // 8. 临湖柚木看台、遮阳伞、长椅、庭院柱灯与 1:100 比例小人
@@ -1124,15 +1210,37 @@ export function buildTerrainAndStructures(maxAnisotropy = 8) {
   return {
     group,
     setDuskFactor(dusk, night = dusk) {
+      const glowOn = dusk > 0.005;
       furniture.setDuskFactor(dusk, night);
       warmAccentMat.emissiveIntensity = 0.12 + dusk * 2.95 + night * 1.15;
       bridgeArchLedMat.emissiveIntensity = 0.1 + dusk * 2.15 + night * 0.95;
       membranePavilion.memMat.emissiveIntensity = dusk * 0.42 + night * 0.22;
-      eastPavilion.warmWoodMat.emissiveIntensity = dusk * 0.92 + night * 0.58;
-      eastPavilion.pavGlassMat.emissiveIntensity = dusk * 0.3 + night * 0.2;
+
+      // 东岸六角木吊顶临湖亭：饱满暖金木顶 + 内芯灯笼漫射 + 亭台与草坪双层柔和羽化暖光
+      eastPavilion.warmWoodMat.emissiveIntensity = dusk * 1.65 + night * 1.15;
+      eastPavilion.pavGlassMat.emissiveIntensity = dusk * 1.15 + night * 0.85;
+      eastPavilion.pavGlassMat.opacity = 0.38 + dusk * 0.14 + night * 0.1;
+      eastPavilion.pavInnerGlowMat.visible = glowOn;
+      eastPavilion.pavInnerGlowMat.opacity = dusk * 0.52 + night * 0.26;
+      eastPavilion.pavInnerGlowMat.emissiveIntensity = dusk * 1.8 + night * 1.1;
+      eastPavilion.pavBaseMat.emissiveIntensity = dusk * 0.28 + night * 0.2;
+      eastPavilion.pavDeckPoolMat.visible = glowOn;
+      eastPavilion.pavDeckPoolMat.opacity = dusk * 0.46 + night * 0.24;
+      eastPavilion.pavLawnPoolMat.visible = glowOn;
+      eastPavilion.pavLawnPoolMat.opacity = dusk * 0.3 + night * 0.2;
+
       teakMat.emissiveIntensity = dusk * 0.12 + night * 0.08;
-      mirrorWaterMat.color.lerpColors(dayMirrorCol, nightMirrorCol, Math.min(1, dusk * 0.72 + night * 0.32));
-      landmarkPoolMat.visible = dusk > 0.005;
+
+      // 北侧对称迎宾镜面水池：深邃夜蓝金属微反光 + 暖金倒影微辉（杜绝纯黑块）
+      const mirrorT = Math.min(1, dusk * 0.72 + night * 0.28);
+      mirrorWaterMat.color.lerpColors(dayMirrorCol, nightMirrorCol, mirrorT);
+      mirrorWaterMat.metalness = 0.24 + mirrorT * 0.36;
+      mirrorWaterMat.envMapIntensity = 1.5 + dusk * 0.65 + night * 0.65;
+      mirrorWaterMat.emissiveIntensity = dusk * 0.36 + night * 0.28;
+      mirrorWarmReflectMat.visible = glowOn;
+      mirrorWarmReflectMat.opacity = dusk * 0.16 + night * 0.12;
+
+      landmarkPoolMat.visible = glowOn;
       landmarkPoolMat.opacity = dusk * 0.38 + night * 0.22;
     },
   };

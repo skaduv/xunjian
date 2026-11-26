@@ -94,6 +94,7 @@ export class StudioScene {
     this.viewportInsets = { top: 0, right: 0, bottom: 0, left: 0 };
     this.cameraAnim = null;
     this._tmpProj = new THREE.Vector3();
+    this._tmpView = new THREE.Vector3();
     this._lastCamPos = this.camera.position.clone();
     this._lastTarget = this.controls.target.clone();
     this.activeUntil = performance.now() + 1800;
@@ -441,13 +442,53 @@ export class StudioScene {
   }
 
   projectToScreen(worldPos) {
+    this.camera.updateMatrixWorld();
+    const view = this._tmpView.copy(worldPos).applyMatrix4(this.camera.matrixWorldInverse);
+    const behindCamera = view.z >= 0;
+    const inFront = !behindCamera;
+
     const v = this._tmpProj.copy(worldPos).project(this.camera);
-    const visible = v.z >= -1 && v.z <= 1 && v.x >= -1.05 && v.x <= 1.05 && v.y >= -1.05 && v.y <= 1.05;
+    const finite = Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
+    const pe = this.camera.projectionMatrix.elements;
+    const optX = (1 - pe[8]) * 0.5 * this.width;
+    const optY = (1 + pe[9]) * 0.5 * this.height;
+
+    let rawX;
+    let rawY;
+    if (finite && Math.abs(view.z) >= 0.01) {
+      rawX = (v.x + 1) * 0.5 * this.width;
+      rawY = (-v.y + 1) * 0.5 * this.height;
+    } else {
+      const sign = behindCamera ? -1 : 1;
+      const depth = Math.max(0.01, Math.abs(view.z));
+      rawX = optX + sign * ((pe[0] * view.x) / depth) * (this.width * 0.5);
+      rawY = optY - sign * ((pe[5] * view.y) / depth) * (this.height * 0.5);
+    }
+
+    const ndcZ = behindCamera
+      ? finite && v.z > 1
+        ? v.z
+        : 2
+      : finite
+        ? v.z
+        : -2;
+    const visible =
+      inFront &&
+      finite &&
+      v.z >= -1 &&
+      v.z <= 1 &&
+      v.x >= -1.05 &&
+      v.x <= 1.05 &&
+      v.y >= -1.05 &&
+      v.y <= 1.05;
+
     return {
-      x: Math.round(((v.x + 1) * 0.5) * this.width * 100) / 100,
-      y: Math.round(((-v.y + 1) * 0.5) * this.height * 100) / 100,
+      x: Math.round(rawX * 100) / 100,
+      y: Math.round(rawY * 100) / 100,
       visible,
-      ndcZ: Number(v.z.toFixed(5)),
+      inFront,
+      behindCamera,
+      ndcZ: Number(ndcZ.toFixed(5)),
     };
   }
 

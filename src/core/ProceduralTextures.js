@@ -428,60 +428,50 @@ export function createInteriorFloorTexture(maxAnisotropy = 8) {
  */
 export function createStudioBackdropTexture(mode = 'day') {
   if (mode === 'night') {
-    const w = 512;
+    // 1024×512 宽屏 2:1 比例深空夜蓝渐变背景，杜绝 16:9 视口下星点被横向拉宽发糊
+    const w = 1024;
     const h = 512;
     const { canvas, ctx } = makeCanvas(w, h);
     const grad = ctx.createLinearGradient(0, 0, 0, h);
     grad.addColorStop(0.0, '#040812');
-    grad.addColorStop(0.38, '#081020');
-    grad.addColorStop(0.68, '#0d192e');
-    grad.addColorStop(0.86, '#111e34');
-    grad.addColorStop(1.0, '#070e1c');
+    grad.addColorStop(0.36, '#070e1d');
+    grad.addColorStop(0.64, '#0a1426');
+    grad.addColorStop(0.86, '#111f36');
+    grad.addColorStop(1.0, '#081120');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, w, h);
 
-    // 柔和极微弱的地平线暗蓝紫空气辉光（绝不发灰、零雾感）
-    const horizonGlow = ctx.createRadialGradient(w * 0.5, h * 0.72, 10, w * 0.5, h * 0.72, w * 0.65);
-    horizonGlow.addColorStop(0, 'rgba(32, 62, 108, 0.22)');
-    horizonGlow.addColorStop(0.6, 'rgba(18, 36, 68, 0.08)');
-    horizonGlow.addColorStop(1, 'rgba(4, 8, 18, 0.0)');
+    // 极克制的地平线深靛蓝微辉（丝滑渐变、绝不发灰、零雾感）
+    const horizonGlow = ctx.createRadialGradient(w * 0.5, h * 0.78, 24, w * 0.5, h * 0.78, w * 0.52);
+    horizonGlow.addColorStop(0.0, 'rgba(30, 58, 102, 0.18)');
+    horizonGlow.addColorStop(0.55, 'rgba(16, 34, 64, 0.06)');
+    horizonGlow.addColorStop(1.0, 'rgba(4, 8, 18, 0.0)');
     ctx.fillStyle = horizonGlow;
     ctx.fillRect(0, 0, w, h);
 
-    // 细腻通透的遥远星点（上半穹顶，大小与色温自然错落）
-    const starCount = 150;
+    // 极细 1px 克制微星（仅在上半深空静谧点缀，绝不加模糊光晕圈、绝不发糊）
+    const starCount = 135;
     for (let i = 0; i < starCount; i++) {
-      const sx = hash2d(i * 1.37, 17.3) * w;
-      const sy = Math.pow(hash2d(i * 2.91, 43.1), 1.25) * (h * 0.62);
+      const sx = Math.floor(hash2d(i * 1.37, 17.3) * w);
+      const sy = Math.floor(Math.pow(hash2d(i * 2.91, 43.1), 1.35) * (h * 0.56));
       const brightness = hash2d(i * 5.13, 89.7);
-      const radius = 0.45 + brightness * 0.95;
-      const alpha = (0.18 + brightness * 0.68) * (1 - sy / (h * 0.72));
+      const heightFade = Math.max(0, 1 - sy / (h * 0.62));
+      const alpha = (0.12 + brightness * 0.38) * heightFade;
 
       const tintSeed = hash2d(i * 7.77, 11.9);
-      let rgb = '226, 238, 255';
-      if (tintSeed < 0.22) rgb = '184, 214, 255';
-      else if (tintSeed > 0.84) rgb = '255, 240, 214';
+      let rgb = '224, 236, 255';
+      if (tintSeed < 0.25) rgb = '178, 212, 255';
+      else if (tintSeed > 0.85) rgb = '255, 240, 216';
 
       ctx.fillStyle = `rgba(${rgb}, ${alpha.toFixed(3)})`;
-      ctx.beginPath();
-      ctx.arc(sx, sy, radius, 0, Math.PI * 2);
-      ctx.fill();
-
-      // 少数亮星叠加极细微星芒，增强午夜通透感
-      if (brightness > 0.88) {
-        const glowR = radius * 3.4;
-        const sg = ctx.createRadialGradient(sx, sy, 0, sx, sy, glowR);
-        sg.addColorStop(0, `rgba(${rgb}, ${(alpha * 0.55).toFixed(3)})`);
-        sg.addColorStop(1, `rgba(${rgb}, 0)`);
-        ctx.fillStyle = sg;
-        ctx.beginPath();
-        ctx.arc(sx, sy, glowR, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      ctx.fillRect(sx, sy, 1, 1);
     }
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
+    tex.generateMipmaps = false;
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
     tex.needsUpdate = true;
     return tex;
   }

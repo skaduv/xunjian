@@ -42,6 +42,7 @@ const ALL_ANCHOR_IDS = [
 
 const _tmpWorld = new THREE.Vector3();
 const _tmpProj = new THREE.Vector3();
+const _tmpView = new THREE.Vector3();
 
 export function createCampusTwinAPI({
   studio,
@@ -202,16 +203,59 @@ export function createCampusTwinAPI({
   }
 
   function projectWithMetadata(worldPos, meta) {
+    studio.camera.updateMatrixWorld();
+    const view = _tmpView.copy(worldPos).applyMatrix4(studio.camera.matrixWorldInverse);
+    // 相机沿局部 -Z 朝前观测：view.z >= 0 严格表示点位于相机眼平面及后方（clipW <= 0，透视除法会反转 X/Y）
+    const behindCamera = view.z >= 0;
+    const inFront = !behindCamera;
+
     const v = _tmpProj.copy(worldPos).project(studio.camera);
+    const finite = Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
     const w = studio.width || window.innerWidth;
     const h = studio.height || window.innerHeight;
-    const inFront = v.z >= -1 && v.z <= 1;
-    const rawX = (v.x + 1) * 0.5 * w;
-    const rawY = (-v.y + 1) * 0.5 * h;
-    const visible = inFront && v.x >= -1.05 && v.x <= 1.05 && v.y >= -1.05 && v.y <= 1.05;
+    const pe = studio.camera.projectionMatrix.elements;
+
+    // 结合 setViewOffset 的光学中心屏幕坐标
+    const optX = (1 - pe[8]) * 0.5 * w;
+    const optY = (1 + pe[9]) * 0.5 * h;
+
+    // 零奇异点的真实相机空间屏幕方向向量（无论在前方、近裁面内、90°侧翼还是相机后方均 100% 指向真实几何方位）
+    const safeDepth = Math.max(0.01, Math.abs(view.z));
+    const trueDirX = ((pe[0] * view.x) / safeDepth) * (w * 0.5);
+    const trueDirY = ((-pe[5] * view.y) / safeDepth) * (h * 0.5);
+
+    let rawX;
+    let rawY;
+    if (finite && Math.abs(view.z) >= 0.01) {
+      rawX = (v.x + 1) * 0.5 * w;
+      rawY = (-v.y + 1) * 0.5 * h;
+    } else {
+      // view.z 接近 0 时避免 /0 产生 Infinity/NaN，保持与标准透视符号一致
+      const sign = behindCamera ? -1 : 1;
+      rawX = optX + sign * trueDirX;
+      rawY = optY + sign * trueDirY;
+    }
+
+    const ndcZ = behindCamera
+      ? finite && v.z > 1
+        ? v.z
+        : 2
+      : finite
+        ? v.z
+        : -2;
+
+    const visible =
+      inFront &&
+      finite &&
+      v.z >= -1 &&
+      v.z <= 1 &&
+      v.x >= -1.05 &&
+      v.x <= 1.05 &&
+      v.y >= -1.05 &&
+      v.y <= 1.05;
     const distance = studio.camera.position.distanceTo(worldPos);
 
-    // 基于当前 viewportInsets 计算安全区 Edge Clamping 坐标与指示角
+    // 基于当前 viewportInsets 计算安全区 Edge Clamping 坐标与真实方向角
     const insets = studio.getViewportInsets?.() || { top: 0, right: 0, bottom: 0, left: 0 };
     const safeLeft = Math.min(w * 0.4, (insets.left || 16) + 18);
     const safeRight = Math.max(w * 0.6, w - (insets.right || 16) - 18);
@@ -224,6 +268,8 @@ export function createCampusTwinAPI({
 
     const inSafe =
       inFront &&
+      ndcZ >= -1 &&
+      ndcZ <= 1 &&
       rawX >= safeLeft &&
       rawX <= safeRight &&
       rawY >= safeTop &&
@@ -232,15 +278,27 @@ export function createCampusTwinAPI({
     if (!inSafe) {
       const cx = (safeLeft + safeRight) * 0.5;
       const cy = (safeTop + safeBottom) * 0.5;
-      let dx = rawX - cx;
-      let dy = rawY - cy;
-      if (!inFront) {
-        dx = -dx;
-        dy = -dy;
+
+      let dx;
+      let dy;
+      if (inFront && finite && Math.abs(view.z) >= 0.01) {
+        // 前方点直接使用真实屏幕投影坐标相对安全区中心的向量（绝不因 visible=false 而取反）
+        dx = rawX - cx;
+        dy = rawY - cy;
+      } else {
+        // 相机后方或眼平面附近点：直接取相机视图空间真实方位（等价于对透视反相后的 ndcX/ndcY 绕光学中心取反）
+        dx = trueDirX;
+        dy = trueDirY;
       }
-      if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) dx = 1;
-      const halfW = Math.max(60, (safeRight - safeLeft) * 0.5 - 52);
-      const halfH = Math.max(48, (safeBottom - safeTop) * 0.5 - 20);
+
+      // 若目标正位于相机光轴正后方（dx≈0, dy≈0），贴合底边向下指示
+      if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) {
+        dx = 0;
+        dy = 1;
+      }
+
+      const halfW = Math.max(80, (safeRight - safeLeft) * 0.5 - 66);
+      const halfH = Math.max(60, (safeBottom - safeTop) * 0.5 - 22);
       const scale = Math.min(
         Math.abs(dx) > 0.001 ? halfW / Math.abs(dx) : Infinity,
         Math.abs(dy) > 0.001 ? halfH / Math.abs(dy) : Infinity
@@ -254,7 +312,9 @@ export function createCampusTwinAPI({
       x: Math.round(rawX * 100) / 100,
       y: Math.round(rawY * 100) / 100,
       visible,
-      ndcZ: Number(v.z.toFixed(5)),
+      inFront,
+      behindCamera,
+      ndcZ: Number(ndcZ.toFixed(5)),
       occluded: computeOccluded(meta),
       distance: Number(distance.toFixed(1)),
       clampedX: Math.round(clampedX * 100) / 100,
@@ -274,6 +334,8 @@ export function createCampusTwinAPI({
           x: 0,
           y: 0,
           visible: false,
+          inFront: false,
+          behindCamera: true,
           ndcZ: 2,
           occluded: false,
           distance: 0,
@@ -392,6 +454,8 @@ export function createCampusTwinAPI({
                 x: 0,
                 y: 0,
                 visible: false,
+                inFront: false,
+                behindCamera: true,
                 ndcZ: 2,
                 occluded: false,
                 distance: 0,
