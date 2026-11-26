@@ -1,0 +1,17 @@
+# Dependencies & build output
+node_modules/
+dist/
+
+# OS & logs
+.DS_Store
+Thumbs.db
+*.log
+
+# Large binary / design / reference assets
+ioply.zip
+*.blend
+*.blend1
+*.glb
+01_KKAA官方建筑图纸/
+02_KKAA官方实拍摄影_EiichiKano/
+03_业主官网园区与会议中心实景/
