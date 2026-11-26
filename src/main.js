@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { StudioScene } from './core/StudioScene.js';
 import { batchStaticMeshes } from './core/MeshBatcher.js';
+import { InteractionManager } from './core/InteractionManager.js';
+import { PatrolController } from './core/PatrolController.js';
 import { buildHardwarePlinth } from './plinth/HardwarePlinth.js';
 import { buildArchitecture } from './architecture/ArchitectureBuilder.js';
 import { buildTerrainAndStructures } from './landscape/TerrainAndStructures.js';
@@ -11,6 +13,7 @@ import { buildVegetationSystem } from './landscape/VegetationSystem.js';
 import { buildCameraAndFovLayers } from './security/CameraLayer.js';
 import { buildSafetyZonesLayer } from './security/SafetyZonesLayer.js';
 import { createCampusTwinAPI } from './api/CampusTwinAPI.js';
+import { initWorkbenchHUD } from './hud/WorkbenchHUD.js';
 
 /**
  * 长三角物理研究中心（IOPLY）3D 数字孪生底座主入口
@@ -62,15 +65,7 @@ function bootstrap() {
   const safetyZonesLayer = buildSafetyZonesLayer(aniso);
   studio.scene.add(cameraLayer.camerasGroup, cameraLayer.fovGroup, safetyZonesLayer.group);
 
-  // 6. 注册昼夜模式联动回调（覆盖建筑室内外灯光、全园区路灯与羽化光池、动态车辆大灯/光束、湖滨地标与底座辉光）
-  studio.onLightingChange((duskFactor, nightFactor) => {
-    architecture.setDuskFactor(duskFactor, nightFactor);
-    terrain.setDuskFactor(duskFactor, nightFactor);
-    roadsAndParking.setDuskFactor(duskFactor, nightFactor);
-    vehicleTraffic.setNightFactor(duskFactor);
-  });
-
-  // 7. 暴露统一外部控制接口 window.CampusTwin
+  // 6. 暴露统一外部控制接口 window.CampusTwin v2.0 + 挂接 3D 交互引擎与自动巡检控制器
   const api = createCampusTwinAPI({
     studio,
     architecture,
@@ -79,11 +74,46 @@ function bootstrap() {
     safetyZonesLayer,
   });
 
+  const interactionManager = new InteractionManager({
+    studio,
+    architecture,
+    cameraLayer,
+    safetyZonesLayer,
+    onHover: (payload) => api._emit('entity:hover', payload),
+    onClick: (payload) => api._emit('entity:click', payload),
+    onCanvasClick: (payload) => api._emit('canvas:click', payload),
+    onStateChange: (kind, payload) => api._emit('state:change', { kind, ...payload }),
+  });
+
+  const patrolController = new PatrolController({
+    studio,
+    actions: api,
+    onStateChange: (patrolState) => {
+      api._emit('patrol:change', patrolState);
+      api._emit('state:change', { kind: 'patrol', patrol: patrolState });
+    },
+  });
+
+  api.attachControllers({ interactionManager, patrolController });
+
+  // 7. 注册昼夜模式联动回调（覆盖建筑室内外灯光、全园区路灯与羽化光池、动态车辆大灯/光束、安全防区与交互高亮）
+  studio.onLightingChange((duskFactor, nightFactor) => {
+    architecture.setDuskFactor(duskFactor, nightFactor);
+    terrain.setDuskFactor(duskFactor, nightFactor);
+    roadsAndParking.setDuskFactor(duskFactor, nightFactor);
+    vehicleTraffic.setNightFactor(duskFactor);
+    safetyZonesLayer.setLightingFactor(duskFactor, nightFactor);
+    interactionManager.setLightingFactor(duskFactor, nightFactor);
+  });
+
   // 支持 URL 参数 ?mode=night / ?mode=dusk 直达夜景/暮光（默认保持白模日间 'day'）
   const initialMode = new URLSearchParams(window.location.search).get('mode');
   if (initialMode === 'night' || initialMode === 'dusk') {
     api.setLightingMode(initialMode, { immediate: true });
   }
+
+  // 8. 挂载「园区智能安全巡检工作台」HUD 到 #hud-root（含三套主题、NVR 掉线收敛、3D 空间锚点与 AI 画中画）
+  const workbenchHud = initWorkbenchHUD({ api });
 
   // 键盘快捷键 N：丝滑 Lerp 切换白模日间 / 星夜模式
   const onKeyDown = (e) => {
@@ -118,12 +148,18 @@ function bootstrap() {
 
     if (document.hidden) return;
 
+    const targetExplode =
+      typeof architecture.getTargetExplode === 'function'
+        ? architecture.getTargetExplode()
+        : architecture.isExploded()
+          ? 1
+          : 0;
     const interactive =
       studio.isInteractiveActive() ||
-      Math.abs((architecture.isExploded() ? 1 : 0) - architecture.getExplodeFactor()) > 0.001;
+      Math.abs(targetExplode - architecture.getExplodeFactor()) > 0.001;
     const minInterval = interactive
       ? ACTIVE_INTERVAL
-      : cameraLayer.hasActiveAlarms()
+      : cameraLayer.hasActiveAlarms() || interactionManager.hasActiveAnimations()
         ? 1000 / 30
         : IDLE_INTERVAL;
 
@@ -136,11 +172,13 @@ function bootstrap() {
     elapsed += dt;
 
     studio.update(dt);
+    patrolController.update(dt);
 
     const explodeFactor = architecture.update(dt);
     if (Math.abs(explodeFactor - lastExplodeFactor) > 0.0001) {
       cameraLayer.syncExplosion(explodeFactor);
       safetyZonesLayer.syncExplosion(explodeFactor);
+      interactionManager.syncExplosion(explodeFactor);
       studio.markShadowsDirty();
       lastExplodeFactor = explodeFactor;
     }
@@ -149,6 +187,8 @@ function bootstrap() {
     plinth.update(elapsed, studio.duskFactor, studio.nightFactor);
     vehicleTraffic.update(dt, studio.duskFactor);
     cameraLayer.update(elapsed);
+    safetyZonesLayer.update(elapsed);
+    interactionManager.update(elapsed);
 
     studio.render();
   }
@@ -168,6 +208,13 @@ function bootstrap() {
     cancelAnimationFrame(rafId);
     document.removeEventListener('visibilitychange', onVisChange);
     window.removeEventListener('keydown', onKeyDown);
+    workbenchHud.dispose();
+    patrolController.dispose();
+    interactionManager.dispose();
+    api.dispose();
+    architecture.focusFloor('all');
+    architecture.dispose();
+    lake.dispose?.();
     studio.dispose();
   };
 
