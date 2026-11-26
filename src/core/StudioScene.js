@@ -31,6 +31,14 @@ export class StudioScene {
     this.nightBackdrop = createStudioBackdropTexture('night');
     this.scene.background = this.dayBackdrop;
 
+    // 轻量 256×256 背景平滑过渡画布（仅在昼/暮/夜 0.6s 过渡期间活跃，收敛后切回原生静态贴图，0 静止开销）
+    this._blendBgCanvas = document.createElement('canvas');
+    this._blendBgCanvas.width = 256;
+    this._blendBgCanvas.height = 256;
+    this._blendBgCtx = this._blendBgCanvas.getContext('2d');
+    this._blendBgTex = new THREE.CanvasTexture(this._blendBgCanvas);
+    this._blendBgTex.colorSpace = THREE.SRGBColorSpace;
+
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
       alpha: false,
@@ -82,6 +90,8 @@ export class StudioScene {
     this.lightMix = { dusk: 0, night: 0 };
     this.targetMix = { dusk: 0, night: 0 };
     this.duskListeners = [];
+    this.afterRenderListeners = [];
+    this.viewportInsets = { top: 0, right: 0, bottom: 0, left: 0 };
     this.cameraAnim = null;
     this._tmpProj = new THREE.Vector3();
     this._lastCamPos = this.camera.position.clone();
@@ -276,10 +286,104 @@ export class StudioScene {
 
   onDuskChange(cb) {
     this.duskListeners.push(cb);
+    return () => {
+      const idx = this.duskListeners.indexOf(cb);
+      if (idx >= 0) this.duskListeners.splice(idx, 1);
+    };
   }
 
   onLightingChange(cb) {
-    this.duskListeners.push(cb);
+    return this.onDuskChange(cb);
+  }
+
+  onAfterRender(cb) {
+    if (typeof cb !== 'function') return () => {};
+    this.afterRenderListeners.push(cb);
+    return () => {
+      const idx = this.afterRenderListeners.indexOf(cb);
+      if (idx >= 0) this.afterRenderListeners.splice(idx, 1);
+    };
+  }
+
+  setViewportInsets(insets = {}) {
+    const next = {
+      top: Math.max(0, Number(insets.top) || 0),
+      right: Math.max(0, Number(insets.right) || 0),
+      bottom: Math.max(0, Number(insets.bottom) || 0),
+      left: Math.max(0, Number(insets.left) || 0),
+    };
+    const prev = this.viewportInsets;
+    if (
+      prev.top === next.top &&
+      prev.right === next.right &&
+      prev.bottom === next.bottom &&
+      prev.left === next.left
+    ) {
+      return { ...this.viewportInsets };
+    }
+    this.viewportInsets = next;
+    this._applyViewportOffset();
+    this.wake(500);
+    return { ...this.viewportInsets };
+  }
+
+  getViewportInsets() {
+    return { ...this.viewportInsets };
+  }
+
+  _applyViewportOffset() {
+    const { top, right, bottom, left } = this.viewportInsets;
+    const w = Math.max(1, this.width);
+    const h = Math.max(1, this.height);
+    if (top === 0 && right === 0 && bottom === 0 && left === 0) {
+      this.camera.clearViewOffset();
+    } else {
+      // 偏移光学投影中心至安全画布正中，完全保留 OrbitControls 拖拽与缩放手感
+      const offsetX = (right - left) * 0.5;
+      const offsetY = (bottom - top) * 0.5;
+      this.camera.setViewOffset(w, h, offsetX, offsetY, w, h);
+    }
+    this.camera.updateProjectionMatrix();
+  }
+
+  _syncBackdropBlend(wDusk, wNight) {
+    // 收敛到纯日/暮/夜态时直接切回原生高清静态背景，0 Canvas 开销
+    if (wDusk < 0.002 && wNight < 0.002) {
+      this.scene.background = this.dayBackdrop;
+      return;
+    }
+    if (wDusk > 0.998 && wNight < 0.002) {
+      this.scene.background = this.duskBackdrop;
+      return;
+    }
+    if (wNight > 0.998 && wDusk < 0.002) {
+      this.scene.background = this.nightBackdrop;
+      return;
+    }
+
+    const ctx = this._blendBgCtx;
+    const cw = this._blendBgCanvas.width;
+    const ch = this._blendBgCanvas.height;
+    if (!ctx) return;
+
+    // 精确三权重线性合成: (1 - wNight) * [(1 - aK) * Day + aK * Dusk] + wNight * Night
+    ctx.globalAlpha = 1;
+    ctx.drawImage(this.dayBackdrop.image, 0, 0, cw, ch);
+
+    const denom = Math.max(0.001, 1 - wNight);
+    const alphaDusk = Math.min(1, Math.max(0, wDusk / denom));
+    if (alphaDusk > 0.002) {
+      ctx.globalAlpha = alphaDusk;
+      ctx.drawImage(this.duskBackdrop.image, 0, 0, cw, ch);
+    }
+    if (wNight > 0.002) {
+      ctx.globalAlpha = Math.min(1, Math.max(0, wNight));
+      ctx.drawImage(this.nightBackdrop.image, 0, 0, cw, ch);
+    }
+    ctx.globalAlpha = 1;
+
+    this._blendBgTex.needsUpdate = true;
+    this.scene.background = this._blendBgTex;
   }
 
   setLightingMode(mode, { immediate = false } = {}) {
@@ -290,13 +394,6 @@ export class StudioScene {
 
     document.body.classList.toggle('mode-dusk', normalized === 'dusk');
     document.body.classList.toggle('mode-night', normalized === 'night');
-
-    this.scene.background =
-      normalized === 'night'
-        ? this.nightBackdrop
-        : normalized === 'dusk'
-          ? this.duskBackdrop
-          : this.dayBackdrop;
 
     this.scene.environment =
       normalized === 'night' && this.nightEnvRenderTarget
@@ -309,6 +406,7 @@ export class StudioScene {
       this.duskFactor = Math.min(1, this.lightMix.dusk * 0.68 + this.lightMix.night);
       this.nightFactor = this.lightMix.night;
       this._applyLightingBlend(this.lightMix.dusk, this.lightMix.night);
+      this._syncBackdropBlend(this.lightMix.dusk, this.lightMix.night);
       for (const cb of this.duskListeners) cb(this.duskFactor, this.nightFactor);
     }
 
@@ -329,11 +427,17 @@ export class StudioScene {
   }
 
   resetView(durationMs = 900) {
-    this.flyTo(
-      new THREE.Vector3(...DEFAULT_CAMERA_VIEW.position),
-      new THREE.Vector3(...DEFAULT_CAMERA_VIEW.target),
-      durationMs
-    );
+    const baseTarget = new THREE.Vector3(...DEFAULT_CAMERA_VIEW.target);
+    const basePos = new THREE.Vector3(...DEFAULT_CAMERA_VIEW.position);
+
+    // 当工作台双侧抽屉展开时，轻度拉远视距 1.12~1.16x，确保底座完整落入中央黄金无遮挡区
+    const horizInsetRatio = (this.viewportInsets.left + this.viewportInsets.right) / Math.max(1, this.width);
+    if (horizInsetRatio > 0.22) {
+      const distScale = 1 + Math.min(0.16, Math.max(0.08, (horizInsetRatio - 0.16) * 0.42));
+      basePos.sub(baseTarget).multiplyScalar(distScale).add(baseTarget);
+    }
+
+    this.flyTo(basePos, baseTarget, durationMs);
   }
 
   projectToScreen(worldPos) {
@@ -394,6 +498,7 @@ export class StudioScene {
       this.duskFactor = Math.min(1, this.lightMix.dusk * 0.68 + this.lightMix.night);
       this.nightFactor = this.lightMix.night;
       this._applyLightingBlend(this.lightMix.dusk, this.lightMix.night);
+      this._syncBackdropBlend(this.lightMix.dusk, this.lightMix.night);
       this.markShadowsDirty();
       for (const cb of this.duskListeners) cb(this.duskFactor, this.nightFactor);
     }
@@ -440,13 +545,18 @@ export class StudioScene {
 
   render() {
     this.renderer.render(this.scene, this.camera);
+    if (this.afterRenderListeners.length > 0) {
+      for (let i = 0; i < this.afterRenderListeners.length; i++) {
+        this.afterRenderListeners[i](this);
+      }
+    }
   }
 
   _handleResize() {
     this.width = this.container.clientWidth || window.innerWidth;
     this.height = this.container.clientHeight || window.innerHeight;
     this.camera.aspect = this.width / this.height;
-    this.camera.updateProjectionMatrix();
+    this._applyViewportOffset();
     this.renderer.setSize(this.width, this.height);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     this.wake(600);
@@ -454,10 +564,13 @@ export class StudioScene {
 
   dispose() {
     window.removeEventListener('resize', this._onResize);
+    this.afterRenderListeners.length = 0;
+    this.duskListeners.length = 0;
     this.controls.dispose();
     this.dayBackdrop?.dispose();
     this.duskBackdrop?.dispose();
     this.nightBackdrop?.dispose();
+    this._blendBgTex?.dispose();
     this.envRenderTarget?.dispose();
     this.nightEnvRenderTarget?.dispose();
 
