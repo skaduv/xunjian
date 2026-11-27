@@ -142,7 +142,7 @@ export function buildHardwarePlinth() {
   const { width, depth, cornerRadius, skirtDepth, undercutInset, undercutHeight } = PLINTH_CONFIG;
 
   const brushedTrimTex = createBrushedMetalTexture('#beb7ad', 4);
-  const brushedFinTex = createBrushedMetalTexture('#6e7580', 4);
+  const brushedFinTex = createBrushedMetalTexture('#aeb4bc', 4);
 
   // 核心材质表（严格对齐主控材质规范，拒绝惨白反光）
   const chassisMat = new THREE.MeshStandardMaterial({
@@ -178,20 +178,28 @@ export function buildHardwarePlinth() {
     envMapIntensity: 0.95,
   });
 
+  const ventBezelMat = new THREE.MeshStandardMaterial({
+    name: 'PlinthVentBezelGunmetal',
+    color: '#4c525c',
+    roughness: 0.38,
+    metalness: 0.56,
+    envMapIntensity: 1.05,
+  });
+
   const cavityBackMat = new THREE.MeshStandardMaterial({
     name: 'PlinthVentCavityDark',
-    color: '#1b1f25',
-    roughness: 0.72,
-    metalness: 0.22,
+    color: '#323842',
+    roughness: 0.68,
+    metalness: 0.26,
   });
 
   const finMat = new THREE.MeshStandardMaterial({
     name: 'PlinthCNCFinBrushed',
-    color: '#777f8a',
+    color: '#ffffff',
     map: brushedFinTex,
     roughness: 0.34,
-    metalness: 0.68,
-    envMapIntensity: 1.15,
+    metalness: 0.52,
+    envMapIntensity: 1.25,
   });
 
   // 1. 精密双段丝缎陶灰圆角托盘外壳（中空内腔容纳草坪、湖盆与 1BF 车库下沉坡道）
@@ -477,77 +485,78 @@ export function buildHardwarePlinth() {
   const flankCenterY = -8.45;
 
   const ventBays = [
-    // 南侧与北侧双长散热风道（与参考图左侧大面积 CNC 鳍片阵列一致）
-    { axis: 'z', side: 1, center: -132, span: 54, fins: 27 },
-    { axis: 'z', side: 1, center: 62, span: 48, fins: 24 },
-    { axis: 'z', side: -1, center: -132, span: 54, fins: 27 },
-    { axis: 'z', side: -1, center: 122, span: 54, fins: 27 },
+    // 南侧与北侧双长散热风道（46% 亮钛鳍片 / 54% 暗槽节律，远近视角均清晰可辨）
+    { axis: 'z', side: 1, center: -132, span: 54, fins: 22 },
+    { axis: 'z', side: 1, center: 62, span: 48, fins: 19 },
+    { axis: 'z', side: -1, center: -132, span: 54, fins: 22 },
+    { axis: 'z', side: -1, center: 122, span: 54, fins: 22 },
     // 西侧与东侧散热风道
-    { axis: 'x', side: -1, center: -76, span: 40, fins: 20 },
-    { axis: 'x', side: -1, center: 76, span: 40, fins: 20 },
-    { axis: 'x', side: 1, center: -76, span: 40, fins: 20 },
-    { axis: 'x', side: 1, center: 46, span: 36, fins: 18 },
+    { axis: 'x', side: -1, center: -76, span: 40, fins: 16 },
+    { axis: 'x', side: -1, center: 76, span: 40, fins: 16 },
+    { axis: 'x', side: 1, center: -76, span: 40, fins: 16 },
+    { axis: 'x', side: 1, center: 46, span: 36, fins: 14 },
   ];
 
   const bayH = 4.2;
   const finTransforms = [];
-  const bezelThick = 0.28;
+  const bezelThick = 0.30;
 
   ventBays.forEach((bay) => {
     const isZ = bay.axis === 'z';
+    // 深石板灰风道内背板（紧贴侧壁，清晰衬托丝缎钛铝竖向鳍片）
     const backGeo = isZ
-      ? new THREE.BoxGeometry(bay.span, bayH, 0.22)
-      : new THREE.BoxGeometry(0.22, bayH, bay.span);
+      ? new THREE.BoxGeometry(bay.span, bayH, 0.16)
+      : new THREE.BoxGeometry(0.16, bayH, bay.span);
     const backMesh = new THREE.Mesh(backGeo, cavityBackMat);
     backMesh.position.set(
-      isZ ? bay.center : bay.side * (halfW - 0.04),
+      isZ ? bay.center : bay.side * (halfW + 0.02),
       flankCenterY,
-      isZ ? bay.side * (halfD - 0.04) : bay.center
+      isZ ? bay.side * (halfD + 0.02) : bay.center
     );
     group.add(backMesh);
 
-    // 上下左右精密倒角金属外框条（勾勒嵌入式风道边框）
+    // 上下左右精密枪灰外框条（勾勒嵌入式风道边框，突出侧壁 0.30m）
     const topBarGeo = isZ
-      ? new THREE.BoxGeometry(bay.span + bezelThick * 2, bezelThick, 0.36)
-      : new THREE.BoxGeometry(0.36, bezelThick, bay.span + bezelThick * 2);
+      ? new THREE.BoxGeometry(bay.span + bezelThick * 2, bezelThick, 0.38)
+      : new THREE.BoxGeometry(0.38, bezelThick, bay.span + bezelThick * 2);
     for (const dy of [-bayH * 0.5 - bezelThick * 0.4, bayH * 0.5 + bezelThick * 0.4]) {
-      const bar = new THREE.Mesh(topBarGeo, graphiteMat);
+      const bar = new THREE.Mesh(topBarGeo, ventBezelMat);
       bar.position.set(
-        isZ ? bay.center : bay.side * (halfW + 0.06),
+        isZ ? bay.center : bay.side * (halfW + 0.12),
         flankCenterY + dy,
-        isZ ? bay.side * (halfD + 0.06) : bay.center
+        isZ ? bay.side * (halfD + 0.12) : bay.center
       );
       group.add(bar);
     }
 
     const sideBarGeo = isZ
-      ? new THREE.BoxGeometry(bezelThick, bayH + bezelThick * 1.6, 0.36)
-      : new THREE.BoxGeometry(0.36, bayH + bezelThick * 1.6, bezelThick);
+      ? new THREE.BoxGeometry(bezelThick, bayH + bezelThick * 1.6, 0.38)
+      : new THREE.BoxGeometry(0.38, bayH + bezelThick * 1.6, bezelThick);
     for (const ds of [-bay.span * 0.5 - bezelThick * 0.45, bay.span * 0.5 + bezelThick * 0.45]) {
-      const bar = new THREE.Mesh(sideBarGeo, graphiteMat);
+      const bar = new THREE.Mesh(sideBarGeo, ventBezelMat);
       bar.position.set(
-        isZ ? bay.center + ds : bay.side * (halfW + 0.06),
+        isZ ? bay.center + ds : bay.side * (halfW + 0.12),
         flankCenterY,
-        isZ ? bay.side * (halfD + 0.06) : bay.center + ds
+        isZ ? bay.side * (halfD + 0.12) : bay.center + ds
       );
       group.add(bar);
     }
 
-    // 散热鳍片阵列变换
-    const step = (bay.span - 2.2) / Math.max(1, bay.fins - 1);
-    const start = bay.center - (bay.span - 2.2) * 0.5;
+    // 丝缎拉丝钛灰竖向散热鳍片阵列（齐平于外框内微收 0.04m，强光影明暗节律清晰锐利）
+    const step = (bay.span - 2.6) / Math.max(1, bay.fins - 1);
+    const start = bay.center - (bay.span - 2.6) * 0.5;
     for (let i = 0; i < bay.fins; i++) {
       const offset = start + i * step;
       finTransforms.push({
         pos: isZ
-          ? [offset, flankCenterY, bay.side * (halfD + 0.04)]
-          : [bay.side * (halfW + 0.04), flankCenterY, offset],
+          ? [offset, flankCenterY, bay.side * (halfD + 0.13)]
+          : [bay.side * (halfW + 0.13), flankCenterY, offset],
         rotY: isZ ? 0 : Math.PI / 2,
       });
     }
   });
 
-  const finGeo = new THREE.BoxGeometry(0.46, bayH - 0.36, 0.44);
+  const finGeo = new THREE.BoxGeometry(1.02, bayH - 0.30, 0.28);
   const finInst = new THREE.InstancedMesh(finGeo, finMat, finTransforms.length);
   const dummy = new THREE.Object3D();
   finTransforms.forEach((t, idx) => {

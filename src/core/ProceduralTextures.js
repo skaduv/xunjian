@@ -49,41 +49,42 @@ function smoothNoise2d(x, y, period) {
 }
 
 /**
- * 1. 丝缎微缩鼠尾草藓绿草坪（丰富自然的柔和绿意与斜纹修剪条带，彻底告别苍白发灰）
+ * 1. 丝缎微缩鼠尾草藓绿草坪（严格周期无缝 45° 修剪斜纹 + 柔和植绒肌理，零拼缝零棋盘格）
  */
 export function createMowedLawnTexture(maxAnisotropy = 8) {
   const size = 256;
   const { canvas, ctx } = makeCanvas(size, size);
 
-  ctx.fillStyle = '#819b76';
-  ctx.fillRect(0, 0, size, size);
-
-  // 柔和 45° 园林修剪斜纹（高雅微差，绝不刺眼）
-  ctx.save();
-  ctx.translate(size / 2, size / 2);
-  ctx.rotate(-Math.PI / 4);
-  const stripeW = 16;
-  for (let x = -size; x < size; x += stripeW * 2) {
-    ctx.fillStyle = 'rgba(164, 190, 146, 0.16)';
-    ctx.fillRect(x, -size, stripeW, size * 2);
-    ctx.fillStyle = 'rgba(72, 96, 66, 0.16)';
-    ctx.fillRect(x + stripeW, -size, stripeW, size * 2);
-  }
-  ctx.restore();
-
-  // 叠加柔和自然有机色斑与细腻绒面微粒（模拟手工模型植绒草地触感）
-  const img = ctx.getImageData(0, 0, size, size);
+  const img = ctx.createImageData(size, size);
   const d = img.data;
+  const baseR = 129; // #819b76
+  const baseG = 155;
+  const baseB = 118;
+  const stripeCycles = 4; // 整数周期：沿 X/Y 边界严格闭合，彻底消除 tile 接缝
+
   for (let y = 0; y < size; y++) {
+    const v = y / size;
     for (let x = 0; x < size; x++) {
+      const u = x / size;
       const idx = (y * size + x) * 4;
-      const macro = (smoothNoise2d((x / size) * 6, (y / size) * 6, 6) - 0.5) * 14;
-      const mid = (smoothNoise2d((x / size) * 16, (y / size) * 16, 16) - 0.5) * 8;
-      const micro = (hash2d(x, y) - 0.5) * 7;
-      const warmShift = (smoothNoise2d((x / size) * 4 + 1.3, (y / size) * 4 + 2.7, 4) - 0.5) * 6;
-      d[idx] = Math.min(255, Math.max(0, d[idx] + macro * 0.85 + mid * 0.8 + micro + warmShift));
-      d[idx + 1] = Math.min(255, Math.max(0, d[idx + 1] + macro + mid + micro));
-      d[idx + 2] = Math.min(255, Math.max(0, d[idx + 2] + macro * 0.75 + mid * 0.75 + micro - warmShift * 0.4));
+
+      // 严格无缝 45° 园林修剪条带（柔和圆润梯形波，克制 ±5.5 RGB 明暗韵律）
+      const phase = (u + v) * Math.PI * 2 * stripeCycles;
+      const stripeWave = Math.sin(phase) * 0.84 + Math.sin(phase * 3) * 0.14;
+      const stripeR = stripeWave * 4.8;
+      const stripeG = stripeWave * 5.6;
+      const stripeB = stripeWave * 4.2;
+
+      // 全整数周期多尺度柔和自然草色微差 + 细腻植绒颗粒
+      const macro = (smoothNoise2d(u * 6, v * 6, 6) - 0.5) * 9.0;
+      const mid = (smoothNoise2d(u * 14, v * 14, 14) - 0.5) * 5.5;
+      const micro = (hash2d(x, y) - 0.5) * 4.5;
+      const warmShift = (smoothNoise2d(u * 4 + 1.3, v * 4 + 2.7, 4) - 0.5) * 4.5;
+
+      d[idx] = Math.min(255, Math.max(0, Math.round(baseR + stripeR + macro * 0.85 + mid * 0.8 + micro + warmShift)));
+      d[idx + 1] = Math.min(255, Math.max(0, Math.round(baseG + stripeG + macro + mid + micro)));
+      d[idx + 2] = Math.min(255, Math.max(0, Math.round(baseB + stripeB + macro * 0.75 + mid * 0.75 + micro - warmShift * 0.35)));
+      d[idx + 3] = 255;
     }
   }
   ctx.putImageData(img, 0, 0);
