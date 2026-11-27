@@ -531,13 +531,13 @@ function createOpticalWaterMaterial(waterNormalTex, shoreField) {
     uShoreSdfMap: { value: shoreField.texture },
     uWaterNormalMap: { value: waterNormalTex },
     uLakeBounds: { value: shoreField.bounds },
-    // 深邃莹润航拍翠青湖泊日间默认色阶（对齐无边界云雾绿野规范 #38 与航拍参考图）
-    uShallowCol: { value: new THREE.Color('#2b6e6d') },
-    uMidCol: { value: new THREE.Color('#1c4f5c') },
-    uDeepCol: { value: new THREE.Color('#133946') },
-    uSkyReflCol: { value: new THREE.Color('#d2e4df') },
-    uMeniscusCol: { value: new THREE.Color('#8ec7c2') },
-    uGlintCol: { value: new THREE.Color('#fff3db') },
+    // 深邃莹润航拍翠青湖泊日间默认色阶（对齐 Round 2 深翠航拍标准 #44 与航拍参考图）
+    uShallowCol: { value: new THREE.Color('#245e5e') },
+    uMidCol: { value: new THREE.Color('#174450') },
+    uDeepCol: { value: new THREE.Color('#0f2f3b') },
+    uSkyReflCol: { value: new THREE.Color('#ccded9') },
+    uMeniscusCol: { value: new THREE.Color('#7db5b0') },
+    uGlintCol: { value: new THREE.Color('#fff1d4') },
     uSunDir: { value: new THREE.Vector3(-265, 205, 165).normalize() },
     uIslandsPosRot: { value: islandPosRot },
     uIslandsRadii: { value: islandRadii },
@@ -839,7 +839,7 @@ export function buildLakeSystem(maxAnisotropy = 8) {
   const basinGeo = new THREE.ShapeGeometry(lakeShape, 1);
   basinGeo.rotateX(-Math.PI / 2);
   const basinMat = new THREE.MeshStandardMaterial({
-    color: '#0d2832',
+    color: '#0a2029',
     roughness: 0.9,
     metalness: 0.02,
   });
@@ -929,7 +929,7 @@ export function buildLakeSystem(maxAnisotropy = 8) {
   group.add(ashlarWallMesh, revealMesh, copingCapMesh);
 
   // 4. 3 座扎根湖底的精工生态岛（InstancedMesh 控 Draw Call）+ 丰茂深苔藓岛冠与精准贴合杆顶芦苇丛（L1 修复）
-  const islandSubBaseMat = new THREE.MeshStandardMaterial({ color: '#2c423b', roughness: 0.84, metalness: 0.04 });
+  const islandSubBaseMat = new THREE.MeshStandardMaterial({ color: '#243832', roughness: 0.84, metalness: 0.04 });
   const islandRimMat = new THREE.MeshStandardMaterial({ color: '#b2aaa0', roughness: 0.62, metalness: 0.04 });
   const islandSoilMat = new THREE.MeshStandardMaterial({
     vertexColors: true,
@@ -939,7 +939,7 @@ export function buildLakeSystem(maxAnisotropy = 8) {
   });
   const reedStalkMat = new THREE.MeshStandardMaterial({
     color: '#ffffff',
-    roughness: 0.80,
+    roughness: 0.82,
     metalness: 0.0,
     envMapIntensity: 0.85,
   });
@@ -954,13 +954,13 @@ export function buildLakeSystem(maxAnisotropy = 8) {
   const islandSubBaseGeo = new THREE.CylinderGeometry(1.04, 1.24, 1.84, 32);
   // 倒角暖石驳岸护圈（顶微收口呈精致倒角感）
   const islandRimGeo = new THREE.CylinderGeometry(0.98, 1.08, 0.44, 32);
-  // 微隆起的丰润深苔藓生态岛冠（顶点着色：外缘深苔绿 #2d612a -> 顶冠鲜翠绿 #437f36）
+  // 微隆起的丰润深苔藓生态岛冠（顶点着色：外缘深苔绿 #255323 -> 顶冠鲜翠绿 #3a6e2f）
   const islandSoilGeo = new THREE.CylinderGeometry(0.84, 0.95, 0.36, 32);
   {
     const sPos = islandSoilGeo.attributes.position;
     const sCol = new Float32Array(sPos.count * 3);
-    const mossDeep = new THREE.Color('#2d612a');
-    const mossCrown = new THREE.Color('#437f36');
+    const mossDeep = new THREE.Color('#255323');
+    const mossCrown = new THREE.Color('#3a6e2f');
     const cTmp = new THREE.Color();
     for (let i = 0; i < sPos.count; i++) {
       const vx = sPos.getX(i);
@@ -1042,8 +1042,8 @@ export function buildLakeSystem(maxAnisotropy = 8) {
 
   const reedEuler = new THREE.Euler(0, 0, 0, 'XYZ');
   const tipOffset = new THREE.Vector3();
-  const reedDeepCol = new THREE.Color('#3a7635');
-  const reedSunCol = new THREE.Color('#6ca34a');
+  const reedDeepCol = new THREE.Color('#2d5e28');
+  const reedSunCol = new THREE.Color('#54893c');
   const tmpReedCol = new THREE.Color();
 
   reedData.forEach((rd, idx) => {
@@ -1079,13 +1079,13 @@ export function buildLakeSystem(maxAnisotropy = 8) {
   // 5. 预分配日间 / 暮光 / 夜间调色板（update 内零堆内存分配！）
   const palettes = {
     day: {
-      shallow: new THREE.Color('#2b6e6d'),
-      mid: new THREE.Color('#1c4f5c'),
-      deep: new THREE.Color('#133946'),
-      skyRefl: new THREE.Color('#d2e4df'),
-      meniscus: new THREE.Color('#8ec7c2'),
-      glint: new THREE.Color('#fff3db'),
-      basin: new THREE.Color('#0d2832'),
+      shallow: new THREE.Color('#245e5e'),
+      mid: new THREE.Color('#174450'),
+      deep: new THREE.Color('#0f2f3b'),
+      skyRefl: new THREE.Color('#ccded9'),
+      meniscus: new THREE.Color('#7db5b0'),
+      glint: new THREE.Color('#fff1d4'),
+      basin: new THREE.Color('#0a2029'),
       sunDir: new THREE.Vector3(-265, 205, 165).normalize(),
       envIntensity: 1.5,
     },

@@ -207,12 +207,12 @@ function buildSculptedSWHillPark(mats, warmAccentMat, landmarkPoolMat) {
   hillGeo.setIndex(indices);
   hillGeo.computeVertexNormals();
 
-  // 丰茂健康叶绿素翡翠绿微地形着色（#407735 坡脚无缝融坪 -> #3b7232 -> #2c5d28 -> #54903e 日照翠顶 + 自然向阳坡面光影）
-  const colLawnBase = new THREE.Color('#407735');
-  const colLow = new THREE.Color('#3b7232');
-  const colMid = new THREE.Color('#2c5d28');
-  const colHigh = new THREE.Color('#54903e');
-  const colSunlit = new THREE.Color('#629f46');
+  // 丰茂健康深翠航拍微地形着色（#36662d 坡脚无缝融坪 -> #32602a -> #244f22 -> #497d35 日照翠顶 + 自然向阳坡面光影）
+  const colLawnBase = new THREE.Color('#36662d');
+  const colLow = new THREE.Color('#32602a');
+  const colMid = new THREE.Color('#244f22');
+  const colHigh = new THREE.Color('#497d35');
+  const colSunlit = new THREE.Color('#558c3b');
   const sunDir = new THREE.Vector3(-265, 205, 165).normalize();
   const tmpCol = new THREE.Color();
 
@@ -514,12 +514,12 @@ function buildSculptedLongpanMountain() {
   geo.setIndex(indices);
   geo.computeVertexNormals();
 
-  // 丰茂健康翡翠森林绿龙蟠山着色（#407735 坡脚无缝融坪 -> #3b7232 -> #2c5d28 深谷苔绿 -> #54903e 晴翠山脊 + 自然坡向光影）
-  const colLawnBase = new THREE.Color('#407735');
-  const colLow = new THREE.Color('#3b7232');
-  const colMid = new THREE.Color('#2c5d28');
-  const colHigh = new THREE.Color('#54903e');
-  const colSunlit = new THREE.Color('#629f46');
+  // 丰茂健康深翠航拍龙蟠山着色（#36662d 坡脚无缝融坪 -> #32602a -> #244f22 深谷苔绿 -> #497d35 晴翠山脊 + 自然坡向光影）
+  const colLawnBase = new THREE.Color('#36662d');
+  const colLow = new THREE.Color('#32602a');
+  const colMid = new THREE.Color('#244f22');
+  const colHigh = new THREE.Color('#497d35');
+  const colSunlit = new THREE.Color('#558c3b');
   const sunDir = new THREE.Vector3(-265, 205, 165).normalize();
   const tmpCol = new THREE.Color();
 
@@ -1796,11 +1796,11 @@ export function buildTerrainAndStructures(maxAnisotropy = 8) {
 
   const poolCopingMat = new THREE.MeshStandardMaterial({ color: '#b9b2a7', roughness: 0.56, metalness: 0.05 });
   const poolBevelMat = new THREE.MeshStandardMaterial({ color: '#cfc8bd', roughness: 0.48, metalness: 0.05 });
-  const poolBasinFloorMat = new THREE.MeshStandardMaterial({ color: '#0d2832', roughness: 0.88, metalness: 0.04 });
-  const dayMirrorCol = new THREE.Color('#184654');
+  const poolBasinFloorMat = new THREE.MeshStandardMaterial({ color: '#0a2029', roughness: 0.88, metalness: 0.04 });
+  const dayMirrorCol = new THREE.Color('#133a47');
   const nightMirrorCol = new THREE.Color('#0c233a');
   const mirrorWaterMat = new THREE.MeshStandardMaterial({
-    color: '#184654',
+    color: '#133a47',
     emissive: new THREE.Color('#0f2c44'),
     emissiveIntensity: 0.0,
     roughness: 0.05,
@@ -1817,14 +1817,14 @@ export function buildTerrainAndStructures(maxAnisotropy = 8) {
     visible: false,
   });
   const hedgeDeepMat = new THREE.MeshStandardMaterial({
-    color: '#204d26',
-    roughness: 0.82,
+    color: '#1a4220',
+    roughness: 0.84,
     metalness: 0.0,
     envMapIntensity: 0.85,
   });
   const hedgeCrownMat = new THREE.MeshStandardMaterial({
-    color: '#357232',
-    roughness: 0.80,
+    color: '#2d622a',
+    roughness: 0.82,
     metalness: 0.0,
     envMapIntensity: 0.85,
   });
