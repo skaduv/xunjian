@@ -283,8 +283,8 @@ const EXTENDED_ARTERIAL_SPECS = [
       [-228, 294],
       [-233, 404],
     ],
-    guardStart: [-195, -564],
-    guardEnd: [-240, 564],
+    guardStart: [-191, -674],
+    guardEnd: [-246, 674],
   },
   {
     name: 'PinglingWestRdExt',
@@ -303,8 +303,8 @@ const EXTENDED_ARTERIAL_SPECS = [
       [272, -208],
       [379, -232],
     ],
-    guardStart: [-616, -28],
-    guardEnd: [555, -271],
+    guardStart: [-722, -7],
+    guardEnd: [662, -295],
   },
   {
     name: 'YongpingAveExt',
@@ -322,8 +322,8 @@ const EXTENDED_ARTERIAL_SPECS = [
       [6, 230],
       [106, 275],
     ],
-    guardStart: [-601, -15],
-    guardEnd: [288, 357],
+    guardStart: [-705, -52],
+    guardEnd: [388, 402],
   },
 ];
 
@@ -621,11 +621,11 @@ function buildSpatialClearanceContext() {
 
   const isBlockedForOuterTree = (x, z, { allowBorderBridge = false } = {}) => {
     const dOut = signedDistOutsideCampus(x, z);
-    if (dOut > 236) return true;
+    if (dOut > 296) return true;
     if (!allowBorderBridge && dOut < 4.0) return true;
 
-    // Generous clearance (>= halfW + 6.8m) against all 3 extended municipal arterial corridors + horizon guards
-    if (isInsideAnyExtendedRoad(x, z, 6.8)) return true;
+    // Generous clearance (>= halfW + 6.5m) against all 3 extended municipal arterial corridors + horizon guards
+    if (isInsideAnyExtendedRoad(x, z, 6.5)) return true;
 
     // Near or inside the campus border: enforce 100% of ALL inner campus exclusions as well
     if (dOut < 34) {
@@ -727,13 +727,13 @@ function createSoftCushionGeometry(detail = 2) {
     const yScale = vy < 0 ? 0.72 : 0.84;
     pos.setXYZ(i, vx * ripple, vy * ripple * yScale, vz * ripple);
 
-    // Baked vertical & crown-shoulder AO shading (deep cool emerald underside -> lush sunlit chlorophyll crown)
+    // Baked vertical & crown-shoulder AO shading (deep velvety forest shadow underside -> natural sunlit crown)
     const t = THREE.MathUtils.clamp((vy + 1.0) * 0.5, 0, 1);
     const s = t * t * (3 - 2 * t);
-    const outerLift = Math.min(1.0, Math.hypot(vx, vz)) * 0.045 * s;
-    colors[i * 3] = 0.46 + 0.58 * s + outerLift * 0.85;
-    colors[i * 3 + 1] = 0.54 + 0.52 * s + outerLift;
-    colors[i * 3 + 2] = 0.50 + 0.46 * s + outerLift * 0.55;
+    const outerLift = Math.min(1.0, Math.hypot(vx, vz)) * 0.032 * s;
+    colors[i * 3] = 0.42 + 0.54 * s + outerLift * 0.85;
+    colors[i * 3 + 1] = 0.50 + 0.48 * s + outerLift;
+    colors[i * 3 + 2] = 0.45 + 0.45 * s + outerLift * 0.55;
   }
 
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
@@ -795,9 +795,9 @@ function createConiferTierGeometry() {
 
     const t = THREE.MathUtils.clamp((y + 0.08) / 1.08, 0, 1);
     const s = t * t * (3 - 2 * t);
-    colors[i * 3] = 0.44 + 0.58 * s;
-    colors[i * 3 + 1] = 0.53 + 0.52 * s;
-    colors[i * 3 + 2] = 0.48 + 0.48 * s;
+    colors[i * 3] = 0.40 + 0.56 * s;
+    colors[i * 3 + 1] = 0.49 + 0.49 * s;
+    colors[i * 3 + 2] = 0.44 + 0.46 * s;
   }
 
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
@@ -893,9 +893,9 @@ function createChamferedHedgeGeometry() {
     const y = pos.getY(i);
     const t = THREE.MathUtils.clamp(y / 0.98, 0, 1);
     const s = t * t * (3 - 2 * t);
-    colors[i * 3] = 0.56 + 0.46 * s;
-    colors[i * 3 + 1] = 0.65 + 0.40 * s;
-    colors[i * 3 + 2] = 0.58 + 0.38 * s;
+    colors[i * 3] = 0.52 + 0.45 * s;
+    colors[i * 3 + 1] = 0.62 + 0.37 * s;
+    colors[i * 3 + 2] = 0.55 + 0.36 * s;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geo.computeVertexNormals();
@@ -938,27 +938,27 @@ function buildBroadleafCanopySystem({ trees, trunkMat, branchMat, stonePitMat, m
     { x: 0.42, y: 1.94, z: 0.22, sx: 1.38, sy: 1.08, sz: 1.34, tier: 2 },
   ];
 
-  // Lush healthy chlorophyll emerald palettes [lowerShade, midBody, sunlitCrown] (@env-clouds Spec #38)
+  // Natural deep photographic aerial chlorophyll palettes [lowerShade, midBody, sunlitCrown] (synced to #36662d lawn & QA #44)
   const SPRING_LIME_PALETTE = [
-    new THREE.Color('#357331'), // Rich fresh emerald underside
-    new THREE.Color('#59A13E'), // Sunlit vibrant spring-lime body
-    new THREE.Color('#79B94C'), // Luminous healthy sunlit crown
+    new THREE.Color('#275726'), // Deep rich olive-emerald underside
+    new THREE.Color('#447931'), // Warm sunlit natural olive-emerald body
+    new THREE.Color('#5C943E'), // Crisp healthy sunlit crown (zero cartoon neon)
   ];
   const SPECIES_PALETTES = {
     deepWood: [
-      new THREE.Color('#16381E'), // Deep woodland shadow green underside
-      new THREE.Color('#22502A'), // Dense healthy forest emerald body
-      new THREE.Color('#377434'), // Sunlit woodland upper crown
+      new THREE.Color('#122D18'), // Deep dense woodland shadow green underside
+      new THREE.Color('#1B4120'), // Rich mature dark forest emerald body
+      new THREE.Color('#2B5C29'), // Natural sunlit woodland upper crown
     ],
     camphor: [
-      new THREE.Color('#1C4724'), // Deep healthy emerald underside
-      new THREE.Color('#2B642E'), // Rich broadleaf mid-canopy body
-      new THREE.Color('#448839'), // Vibrant sunlit crown highlight
+      new THREE.Color('#16361C'), // Deep forest-emerald underside
+      new THREE.Color('#235225'), // Rich healthy broadleaf mid-canopy
+      new THREE.Color('#376E2F'), // Natural sunlit canopy highlight
     ],
     moss: [
-      new THREE.Color('#225229'), // Lush deep park emerald underside
-      new THREE.Color('#387A35'), // Vibrant healthy meadow-leaf body
-      new THREE.Color('#589E40'), // Bright sunlit chlorophyll crown
+      new THREE.Color('#1C4221'), // Lush shadowed park emerald underside
+      new THREE.Color('#2E662C'), // Vibrant healthy meadow-leaf body
+      new THREE.Color('#497E33'), // Warm sunlit chlorophyll crown
     ],
     springLime: SPRING_LIME_PALETTE,
     amber: SPRING_LIME_PALETTE,
@@ -967,7 +967,7 @@ function buildBroadleafCanopySystem({ trees, trunkMat, branchMat, stonePitMat, m
   const canopyMat = new THREE.MeshStandardMaterial({
     color: '#ffffff',
     vertexColors: true,
-    roughness: 0.79,
+    roughness: 0.86,
     metalness: 0.0,
   });
 
@@ -1098,10 +1098,10 @@ function buildBroadleafCanopySystem({ trees, trunkMat, branchMat, stonePitMat, m
     }
 
     // 5. Ground Contact AO disc registration (slope-aware per V4; fade out before outer cloud sea)
-    const allowAO = tr.isOuter ? tr.slope <= 0.14 && (tr.dOut ?? 0) <= 155 : tr.slope <= 0.22;
+    const allowAO = tr.isOuter ? tr.slope <= 0.14 && (tr.dOut ?? 0) <= 178 : tr.slope <= 0.22;
     if (allowAO) {
       const slopeShrink = tr.slope > 0.12 ? THREE.MathUtils.lerp(1.0, 0.55, (tr.slope - 0.12) / 0.10) : 1.0;
-      const outerFade = tr.isOuter ? smoothstep(155, 115, tr.dOut ?? 0) : 1.0;
+      const outerFade = tr.isOuter ? smoothstep(178, 125, tr.dOut ?? 0) : 1.0;
       const aoRadius = 3.25 * s * slopeShrink * outerFade;
       if (aoRadius > 0.45) {
         aoEntries.push({
@@ -1138,7 +1138,7 @@ function buildSculptedConifers({ trees, trunkMat, aoEntries }) {
   const foliageMat = new THREE.MeshStandardMaterial({
     color: '#ffffff',
     vertexColors: true,
-    roughness: 0.81,
+    roughness: 0.87,
     metalness: 0.0,
   });
 
@@ -1147,10 +1147,10 @@ function buildSculptedConifers({ trees, trunkMat, aoEntries }) {
   const tierInst = new THREE.InstancedMesh(tierGeo, foliageMat, trees.length * tiers);
   tierInst.name = 'ConiferTiers';
 
-  // Deep lush woodland pine shadow -> healthy forest conifer -> sunlit evergreen apex (@env-clouds #38)
-  const cBase = new THREE.Color('#173A20');
-  const cMid = new THREE.Color('#23522B');
-  const cTop = new THREE.Color('#3C7C37');
+  // Deep velvety woodland pine shadow -> rich evergreen body -> natural sunlit pine apex (QA #44)
+  const cBase = new THREE.Color('#132F19');
+  const cMid = new THREE.Color('#1D4422');
+  const cTop = new THREE.Color('#32672D');
   const col = new THREE.Color();
   const dummy = new THREE.Object3D();
 
@@ -1198,10 +1198,10 @@ function buildSculptedConifers({ trees, trunkMat, aoEntries }) {
     }
 
     // Contact AO disc only on gentle terrain (steep mountain flanks rely on real shadows; fade before outer cloud sea)
-    const allowConiferAO = tr.isOuter ? tr.slope <= 0.14 && (tr.dOut ?? 0) <= 155 : tr.slope <= 0.20;
+    const allowConiferAO = tr.isOuter ? tr.slope <= 0.14 && (tr.dOut ?? 0) <= 178 : tr.slope <= 0.20;
     if (allowConiferAO) {
       const slopeShrink = tr.slope > 0.12 ? THREE.MathUtils.lerp(1.0, 0.55, (tr.slope - 0.12) / 0.08) : 1.0;
-      const outerFade = tr.isOuter ? smoothstep(155, 115, tr.dOut ?? 0) : 1.0;
+      const outerFade = tr.isOuter ? smoothstep(178, 125, tr.dOut ?? 0) : 1.0;
       const aoRadius = 2.95 * s * slopeShrink * outerFade;
       if (aoRadius > 0.45) {
         aoEntries.push({
@@ -1232,7 +1232,7 @@ function buildOrnamentalShrubs({ clusters, aoEntries }) {
   const shrubMat = new THREE.MeshStandardMaterial({
     color: '#ffffff',
     vertexColors: true,
-    roughness: 0.82,
+    roughness: 0.86,
     metalness: 0.0,
   });
 
@@ -1244,11 +1244,11 @@ function buildOrnamentalShrubs({ clusters, aoEntries }) {
   ];
 
   const palette = [
-    new THREE.Color('#1D4824'), // Deep shaded emerald shrub
-    new THREE.Color('#25592B'), // Rich healthy holly-green
-    new THREE.Color('#337132'), // Vibrant mid chlorophyll emerald
-    new THREE.Color('#4B8E3B'), // Sunlit fresh park shrub
-    new THREE.Color('#63A943'), // Fresh sunlit spring-lime accent (replaces autumn brown)
+    new THREE.Color('#15351B'), // Deep shaded forest shrub
+    new THREE.Color('#1E4A23'), // Rich healthy boxwood-holly
+    new THREE.Color('#2B612A'), // Natural mid chlorophyll emerald
+    new THREE.Color('#3D7630'), // Sunlit park shrub foliage
+    new THREE.Color('#528A38'), // Warm sunlit olive-emerald accent
   ];
 
   const inst = new THREE.InstancedMesh(shrubGeo, shrubMat, clusters.length * blobOffsets.length);
@@ -1311,15 +1311,15 @@ function buildTrimmedHedges(hedges) {
   const mat = new THREE.MeshStandardMaterial({
     color: '#ffffff',
     vertexColors: true,
-    roughness: 0.80,
+    roughness: 0.85,
     metalness: 0.0,
   });
 
   const inst = new THREE.InstancedMesh(geo, mat, hedges.length);
   inst.name = 'TrimmedHedgeBlocks';
   const dummy = new THREE.Object3D();
-  // Paired with deep emerald vertex AO base (0.56-0.65) -> deep #204d26 flank & sunlit #357232 crown (@env-clouds #38)
-  const baseCol = new THREE.Color('#357232');
+  // Synced with @green-terrain QA #44 boxwood palette (#1a4220 base AO -> #2d622a crown)
+  const baseCol = new THREE.Color('#2D622A');
   const col = new THREE.Color();
 
   for (let i = 0; i < hedges.length; i++) {
@@ -1370,15 +1370,15 @@ function buildShorelineReeds(tufts) {
   bladeGeo.translate(0, 0.5, 0);
   const bladeMat = new THREE.MeshStandardMaterial({
     color: '#ffffff',
-    roughness: 0.78,
+    roughness: 0.84,
     metalness: 0.0,
   });
 
   const plumeGeo = new THREE.SphereGeometry(0.068, 6, 5);
   plumeGeo.scale(0.85, 2.5, 0.85);
   const plumeMat = new THREE.MeshStandardMaterial({
-    color: '#C7C9A6',
-    roughness: 0.82,
+    color: '#B9BCA0',
+    roughness: 0.86,
     metalness: 0.0,
   });
 
@@ -1390,9 +1390,9 @@ function buildShorelineReeds(tufts) {
   const dummy = new THREE.Object3D();
   const euler = new THREE.Euler();
   const tipOffset = new THREE.Vector3();
-  // Healthy lush marsh-emerald reeds (@env-clouds #38: #3a7635 -> #6ca34a)
-  const reedDark = new THREE.Color('#2E662D');
-  const reedLight = new THREE.Color('#6CA34A');
+  // Rich natural marsh-emerald reeds synced to deeper aerial chlorophyll palette
+  const reedDark = new THREE.Color('#235224');
+  const reedLight = new THREE.Color('#568B3C');
   const col = new THREE.Color();
 
   for (let i = 0; i < blades.length; i++) {
@@ -1432,12 +1432,12 @@ function buildContactAODiscs(aoEntries) {
   const aoGeo = new THREE.PlaneGeometry(2, 2);
   aoGeo.rotateX(-Math.PI / 2);
 
-  // Deepened lush forest-shadow Contact AO discs matching crisp aerial sunlight (@env-clouds #38: rgba(16,32,18,0.58))
+  // Deepened lush forest-shadow Contact AO discs matching crisp aerial sunlight (QA #44)
   const aoMat = new THREE.MeshBasicMaterial({
     map: aoTex,
-    color: '#102012',
+    color: '#0E1C10',
     transparent: true,
-    opacity: 0.56,
+    opacity: 0.58,
     depthWrite: false,
     polygonOffset: true,
     polygonOffsetFactor: -1,
@@ -1486,12 +1486,12 @@ export function buildVegetationSystem() {
     isBlockedForReed,
   } = buildSpatialClearanceContext();
 
-  // Shared materials harmonized with @env-clouds Healthy-Emerald Aerial Palette #38
-  const trunkMat = new THREE.MeshStandardMaterial({ color: '#574130', roughness: 0.87, metalness: 0.0 });
-  const branchMat = new THREE.MeshStandardMaterial({ color: '#664D3A', roughness: 0.87, metalness: 0.0 });
-  const coniferTrunkMat = new THREE.MeshStandardMaterial({ color: '#4A3628', roughness: 0.89, metalness: 0.0 });
-  const stonePitMat = new THREE.MeshStandardMaterial({ color: '#B8B3A8', roughness: 0.68, metalness: 0.03 });
-  const mulchMat = new THREE.MeshStandardMaterial({ color: '#352E27', roughness: 0.94, metalness: 0.0 });
+  // Shared materials harmonized with deepened matte-velvet aerial chlorophyll palette (QA #44)
+  const trunkMat = new THREE.MeshStandardMaterial({ color: '#4F3B2B', roughness: 0.90, metalness: 0.0 });
+  const branchMat = new THREE.MeshStandardMaterial({ color: '#5C4534', roughness: 0.90, metalness: 0.0 });
+  const coniferTrunkMat = new THREE.MeshStandardMaterial({ color: '#423023', roughness: 0.91, metalness: 0.0 });
+  const stonePitMat = new THREE.MeshStandardMaterial({ color: '#B4AFA4', roughness: 0.72, metalness: 0.02 });
+  const mulchMat = new THREE.MeshStandardMaterial({ color: '#2D2720', roughness: 0.95, metalness: 0.0 });
 
   const broadleafTrees = [];
   const conifers = [];
@@ -1873,18 +1873,28 @@ export function buildVegetationSystem() {
   }
 
   // -------------------------------------------------------------------------
-  // 5e. Seamless Outer Woodland Belt & Border-Bridging Forest Groves
-  //     Reuses the EXACT same InstancedMesh buffers (0 extra draw calls!)
-  //     Spans perimeter bridging + d_out ∈ [12m, 235m], tapering gracefully into the clouds
-  //     while keeping >= halfW + 6.8m clear of all 3 extended municipal arterial roads!
+  // 5e. Dense Interlocking Outer Woodland Belt & Continuous Cloud-Horizon Forest Curtain
+  //     Reuses the EXACT same 12 InstancedMesh buffers (0 extra draw calls!)
+  //     Spans perimeter bridging + dense multi-tree forest clusters + 2-row hedgerow bands
+  //     + continuous 360° outer forest curtain receding INTO the clouds (d_out ∈ [12m, 294m])
+  //     while keeping >= halfW + 6.5m clear of all 3 extended municipal arterial roads!
   // -------------------------------------------------------------------------
   let outerSeed = 9000;
   const pickOuterBroadleafSpecies = (seedVal, brightBias = 0.0) => {
     const r = seeded(seedVal, 173);
-    if (r < 0.08 + brightBias) return 'springLime';
-    if (r < 0.34 + brightBias) return 'moss';
-    if (r < 0.68) return 'camphor';
+    if (r < 0.05 + brightBias) return 'springLime';
+    if (r < 0.24 + brightBias) return 'moss';
+    if (r < 0.56) return 'camphor';
     return 'deepWood';
+  };
+
+  // Clamp outer tree height softly on high East foothills & deep outer cloud edge so crowns
+  // nestle gracefully underneath the upper volumetric cloud veil without sharp spikes.
+  const clampOuterScale = (x, z, rawScale, dOut) => {
+    const h = sampleTotalElevation(x, z);
+    const hillDamp = h > 7.5 ? THREE.MathUtils.lerp(1.0, 0.80, smoothstep(7.5, 16.5, h)) : 1.0;
+    const mistDamp = dOut > 230 ? THREE.MathUtils.lerp(1.0, 0.84, smoothstep(230, 294, dOut)) : 1.0;
+    return rawScale * hillDamp * mistDamp;
   };
 
   // Approximate inner municipal road centerlines (strictly for selecting outer-side border-bridging pockets)
@@ -1892,66 +1902,66 @@ export function buildVegetationSystem() {
   const zgcApproxX = (z) => -208 + -16 * ((z + 184) / 368);
   const yongpingApproxZ = (x) => 114 + 70 * ((x + 243) / 149);
 
-  // Sub-layer 1: Border-Bridging Woodlands (eliminates any visible gap along the former ±243×±184 plinth rim)
+  // Sub-layer 1: Dense Border-Bridging Woodlands (eliminates any visible seam along the former ±243×±184 rim)
   const borderBridgeBands = [
-    // 0a. North of Pingling West Road (bridging z ∈ [-194, -112] seamlessly into northern countryside)
+    // 0a. North of Pingling West Road (bridging z ∈ [-198, -112] seamlessly into northern woodland)
     {
       xMin: -242,
-      xMax: 152,
-      zMin: -196,
+      xMax: 158,
+      zMin: -198,
       zMax: -112,
-      attempts: 130,
-      target: 44,
-      coniferRatio: 0.28,
-      spacing: 7.4,
+      attempts: 210,
+      target: 64,
+      coniferRatio: 0.30,
+      spacing: 5.5,
       guard: (x, z) => z < pinglingApproxZ(x) - 16.0,
     },
-    // 0b. West of Zhongguancun Avenue (bridging x ∈ [-262, -225] seamlessly into western countryside)
+    // 0b. West of Zhongguancun Avenue (bridging x ∈ [-268, -225] seamlessly into western woodland)
     {
-      xMin: -262,
+      xMin: -268,
       xMax: -225,
-      zMin: -188,
-      zMax: 188,
-      attempts: 80,
-      target: 22,
-      coniferRatio: 0.26,
-      spacing: 7.6,
+      zMin: -190,
+      zMax: 190,
+      attempts: 130,
+      target: 36,
+      coniferRatio: 0.28,
+      spacing: 5.6,
       guard: (x, z) => x < zgcApproxX(z) - 16.0,
     },
-    // 0c. Southwest of Yongping Avenue (bridging SW corner seamlessly into SW countryside)
+    // 0c. Southwest of Yongping Avenue (bridging SW corner seamlessly into SW woodland)
     {
-      xMin: -246,
-      xMax: -92,
+      xMin: -248,
+      xMax: -90,
       zMin: 122,
-      zMax: 202,
-      attempts: 72,
-      target: 18,
-      coniferRatio: 0.25,
-      spacing: 7.4,
+      zMax: 206,
+      attempts: 115,
+      target: 28,
+      coniferRatio: 0.26,
+      spacing: 5.5,
       guard: (x, z) => z > yongpingApproxZ(x) + 16.0,
     },
     // 0d. East Longpan Seamless Transition (fusing Longpan Mountain into East Longpan Foothills)
     {
-      xMin: 230,
-      xMax: 266,
-      zMin: -186,
-      zMax: 186,
-      attempts: 96,
-      target: 32,
-      coniferRatio: 0.65,
-      spacing: 7.0,
+      xMin: 228,
+      xMax: 274,
+      zMin: -188,
+      zMax: 188,
+      attempts: 165,
+      target: 48,
+      coniferRatio: 0.64,
+      spacing: 5.4,
       guard: () => true,
     },
     // 0e. South & Southeast Lakeside Outer Skirt (strictly outside WalkwayMain & south park edge)
     {
-      xMin: -92,
-      xMax: 244,
+      xMin: -94,
+      xMax: 248,
       zMin: 175,
-      zMax: 204,
-      attempts: 84,
-      target: 22,
+      zMax: 208,
+      attempts: 135,
+      target: 34,
       coniferRatio: 0.30,
-      spacing: 7.8,
+      spacing: 5.8,
       guard: (x, z) => signedDistOutsideCampus(x, z) >= -8.0,
     },
   ];
@@ -1964,12 +1974,13 @@ export function buildVegetationSystem() {
       const x = band.xMin + seeded(outerSeed, 11) * (band.xMax - band.xMin);
       const z = band.zMin + seeded(outerSeed, 17) * (band.zMax - band.zMin);
       if (!band.guard(x, z)) continue;
-      // Organic clumping wave so border trees cluster naturally instead of forming a wall
+      // Organic clumping wave so border trees form rich interlocking copses rather than uniform stripes
       const clump =
         Math.sin(x * 0.032 + z * 0.024) * 0.5 + Math.cos(x * 0.019 - z * 0.036) * 0.5;
-      if (clump < -0.34 && seeded(outerSeed, 23) > 0.35) continue;
+      if (clump < -0.42 && seeded(outerSeed, 23) > 0.32) continue;
 
-      const scale = 1.02 + seeded(outerSeed, 29) * 0.44;
+      const dOut = signedDistOutsideCampus(x, z);
+      const scale = clampOuterScale(x, z, 1.12 + seeded(outerSeed, 29) * 0.48, dOut);
       const rot = seeded(outerSeed, 31) * Math.PI * 2;
       const isConifer = seeded(outerSeed, 37) < band.coniferRatio;
       const ok = isConifer
@@ -1979,7 +1990,7 @@ export function buildVegetationSystem() {
             z,
             scale,
             rot,
-            species: pickOuterBroadleafSpecies(outerSeed, 0.02),
+            species: pickOuterBroadleafSpecies(outerSeed, 0.01),
             minSpacing: band.spacing,
             allowBorderBridge: true,
           });
@@ -1987,42 +1998,42 @@ export function buildVegetationSystem() {
     }
   }
 
-  // Sub-layer 2: 28 Clustered Countryside Woodland Groves encircling all 360° (d_out ∈ [12m, 235m])
-  // Dense dark-emerald forest copses separated by sunlit emerald countryside clearings,
-  // tapering softly past d_out > 170m into the drifting perimeter clouds.
+  // Sub-layer 2: 28 Dense Interlocking Countryside Woodland Groves (d_out ∈ [12m, 225m])
+  // Tighter intra-grove spacing (4.8–5.4m) + mature canopies (1.18–1.74) overlap crowns into
+  // plush continuous forest masses framing lush emerald countryside clearings (matching reference!)
   const outerWoodlandGroves = [
     // East & Northeast Longpan Foothill Pine-Mixed Forest Ridges
-    { cx: 295, cz: -145, rx: 52, rz: 44, rot: 0.2, target: 18, coniferRatio: 0.62, sMin: 1.08, sMax: 1.56 },
-    { cx: 365, cz: -120, rx: 58, rz: 50, rot: -0.3, target: 16, coniferRatio: 0.65, sMin: 1.12, sMax: 1.62 },
-    { cx: 315, cz: -35, rx: 56, rz: 54, rot: 0.15, target: 20, coniferRatio: 0.62, sMin: 1.10, sMax: 1.60 },
-    { cx: 405, cz: -25, rx: 58, rz: 56, rot: 0.4, target: 14, coniferRatio: 0.68, sMin: 1.08, sMax: 1.52 },
-    { cx: 300, cz: 78, rx: 54, rz: 52, rot: -0.25, target: 20, coniferRatio: 0.60, sMin: 1.10, sMax: 1.58 },
-    { cx: 392, cz: 92, rx: 56, rz: 54, rot: 0.3, target: 15, coniferRatio: 0.65, sMin: 1.06, sMax: 1.50 },
-    { cx: 288, cz: 196, rx: 54, rz: 46, rot: 0.45, target: 16, coniferRatio: 0.50, sMin: 1.08, sMax: 1.52 },
-    { cx: 360, cz: 210, rx: 52, rz: 48, rot: -0.2, target: 12, coniferRatio: 0.55, sMin: 1.04, sMax: 1.44 },
+    { cx: 298, cz: -145, rx: 56, rz: 46, rot: 0.2, target: 26, coniferRatio: 0.60, sMin: 1.18, sMax: 1.66 },
+    { cx: 374, cz: -120, rx: 64, rz: 54, rot: -0.3, target: 24, coniferRatio: 0.64, sMin: 1.20, sMax: 1.70 },
+    { cx: 318, cz: -32, rx: 60, rz: 56, rot: 0.15, target: 28, coniferRatio: 0.60, sMin: 1.18, sMax: 1.68 },
+    { cx: 412, cz: -22, rx: 64, rz: 58, rot: 0.4, target: 22, coniferRatio: 0.66, sMin: 1.18, sMax: 1.66 },
+    { cx: 304, cz: 78, rx: 58, rz: 54, rot: -0.25, target: 28, coniferRatio: 0.58, sMin: 1.18, sMax: 1.68 },
+    { cx: 400, cz: 94, rx: 62, rz: 56, rot: 0.3, target: 22, coniferRatio: 0.64, sMin: 1.18, sMax: 1.64 },
+    { cx: 292, cz: 198, rx: 58, rz: 50, rot: 0.45, target: 24, coniferRatio: 0.48, sMin: 1.18, sMax: 1.66 },
+    { cx: 372, cz: 218, rx: 58, rz: 52, rot: -0.2, target: 20, coniferRatio: 0.54, sMin: 1.16, sMax: 1.60 },
     // North & Northwest Countryside Groves
-    { cx: 195, cz: -245, rx: 58, rz: 42, rot: -0.18, target: 16, coniferRatio: 0.44, sMin: 1.06, sMax: 1.52 },
-    { cx: 295, cz: -275, rx: 56, rz: 48, rot: 0.25, target: 13, coniferRatio: 0.52, sMin: 1.05, sMax: 1.46 },
-    { cx: 70, cz: -255, rx: 64, rz: 44, rot: -0.15, target: 18, coniferRatio: 0.34, sMin: 1.06, sMax: 1.54 },
-    { cx: 125, cz: -348, rx: 66, rz: 46, rot: 0.2, target: 12, coniferRatio: 0.38, sMin: 1.02, sMax: 1.42 },
-    { cx: -65, cz: -268, rx: 68, rz: 48, rot: 0.12, target: 19, coniferRatio: 0.32, sMin: 1.08, sMax: 1.54 },
-    { cx: -110, cz: -358, rx: 60, rz: 44, rot: -0.22, target: 11, coniferRatio: 0.36, sMin: 1.02, sMax: 1.42 },
-    { cx: -305, cz: -255, rx: 60, rz: 52, rot: 0.35, target: 16, coniferRatio: 0.36, sMin: 1.06, sMax: 1.52 },
+    { cx: 195, cz: -248, rx: 62, rz: 46, rot: -0.18, target: 24, coniferRatio: 0.44, sMin: 1.18, sMax: 1.66 },
+    { cx: 302, cz: -282, rx: 62, rz: 52, rot: 0.25, target: 20, coniferRatio: 0.52, sMin: 1.16, sMax: 1.62 },
+    { cx: 68, cz: -258, rx: 68, rz: 48, rot: -0.15, target: 26, coniferRatio: 0.34, sMin: 1.18, sMax: 1.68 },
+    { cx: 128, cz: -358, rx: 72, rz: 50, rot: 0.2, target: 20, coniferRatio: 0.38, sMin: 1.16, sMax: 1.62 },
+    { cx: -68, cz: -272, rx: 72, rz: 52, rot: 0.12, target: 28, coniferRatio: 0.32, sMin: 1.20, sMax: 1.68 },
+    { cx: -112, cz: -366, rx: 66, rz: 48, rot: -0.22, target: 18, coniferRatio: 0.36, sMin: 1.16, sMax: 1.60 },
+    { cx: -310, cz: -260, rx: 64, rz: 56, rot: 0.35, target: 24, coniferRatio: 0.36, sMin: 1.18, sMax: 1.66 },
     // West & Southwest Countryside Groves
-    { cx: -315, cz: -150, rx: 54, rz: 46, rot: -0.2, target: 16, coniferRatio: 0.30, sMin: 1.06, sMax: 1.52 },
-    { cx: -402, cz: -145, rx: 52, rz: 48, rot: 0.15, target: 12, coniferRatio: 0.34, sMin: 1.02, sMax: 1.42 },
-    { cx: -312, cz: -22, rx: 56, rz: 54, rot: 0.22, target: 18, coniferRatio: 0.28, sMin: 1.08, sMax: 1.54 },
-    { cx: -406, cz: -6, rx: 54, rz: 50, rot: -0.28, target: 12, coniferRatio: 0.32, sMin: 1.02, sMax: 1.44 },
-    { cx: -310, cz: 148, rx: 56, rz: 48, rot: -0.35, target: 17, coniferRatio: 0.28, sMin: 1.06, sMax: 1.52 },
-    { cx: -395, cz: 182, rx: 54, rz: 48, rot: 0.25, target: 12, coniferRatio: 0.30, sMin: 1.02, sMax: 1.42 },
-    { cx: -302, cz: 268, rx: 58, rz: 48, rot: 0.4, target: 14, coniferRatio: 0.32, sMin: 1.04, sMax: 1.46 },
-    // South & Southeast Countryside Groves (prominent foreground framing fading into clouds)
-    { cx: -148, cz: 256, rx: 58, rz: 44, rot: -0.18, target: 16, coniferRatio: 0.26, sMin: 1.06, sMax: 1.52 },
-    { cx: -145, cz: 350, rx: 58, rz: 44, rot: 0.2, target: 11, coniferRatio: 0.30, sMin: 1.02, sMax: 1.42 },
-    { cx: -12, cz: 278, rx: 64, rz: 46, rot: 0.14, target: 18, coniferRatio: 0.26, sMin: 1.08, sMax: 1.54 },
-    { cx: 25, cz: 368, rx: 62, rz: 44, rot: -0.15, target: 11, coniferRatio: 0.30, sMin: 1.02, sMax: 1.42 },
-    { cx: 148, cz: 245, rx: 56, rz: 44, rot: -0.3, target: 16, coniferRatio: 0.34, sMin: 1.08, sMax: 1.52 },
-    { cx: 192, cz: 342, rx: 56, rz: 46, rot: 0.22, target: 12, coniferRatio: 0.36, sMin: 1.02, sMax: 1.42 },
+    { cx: -318, cz: -150, rx: 58, rz: 50, rot: -0.2, target: 24, coniferRatio: 0.30, sMin: 1.18, sMax: 1.66 },
+    { cx: -412, cz: -146, rx: 58, rz: 52, rot: 0.15, target: 20, coniferRatio: 0.34, sMin: 1.16, sMax: 1.62 },
+    { cx: -316, cz: -20, rx: 60, rz: 56, rot: 0.22, target: 26, coniferRatio: 0.28, sMin: 1.20, sMax: 1.68 },
+    { cx: -416, cz: -4, rx: 60, rz: 54, rot: -0.28, target: 20, coniferRatio: 0.32, sMin: 1.16, sMax: 1.62 },
+    { cx: -312, cz: 150, rx: 60, rz: 52, rot: -0.35, target: 24, coniferRatio: 0.28, sMin: 1.18, sMax: 1.66 },
+    { cx: -406, cz: 186, rx: 60, rz: 52, rot: 0.25, target: 20, coniferRatio: 0.30, sMin: 1.16, sMax: 1.60 },
+    { cx: -308, cz: 274, rx: 62, rz: 52, rot: 0.4, target: 22, coniferRatio: 0.32, sMin: 1.16, sMax: 1.62 },
+    // South & Southeast Countryside Groves (prominent foreground forest belts framing emerald meadows)
+    { cx: -148, cz: 258, rx: 62, rz: 48, rot: -0.18, target: 24, coniferRatio: 0.26, sMin: 1.18, sMax: 1.68 },
+    { cx: -146, cz: 358, rx: 64, rz: 48, rot: 0.2, target: 18, coniferRatio: 0.30, sMin: 1.16, sMax: 1.60 },
+    { cx: -10, cz: 280, rx: 68, rz: 50, rot: 0.14, target: 26, coniferRatio: 0.26, sMin: 1.20, sMax: 1.68 },
+    { cx: 26, cz: 374, rx: 66, rz: 48, rot: -0.15, target: 18, coniferRatio: 0.30, sMin: 1.16, sMax: 1.60 },
+    { cx: 150, cz: 248, rx: 60, rz: 48, rot: -0.3, target: 24, coniferRatio: 0.34, sMin: 1.18, sMax: 1.66 },
+    { cx: 196, cz: 352, rx: 62, rz: 50, rot: 0.22, target: 20, coniferRatio: 0.36, sMin: 1.16, sMax: 1.60 },
   ];
 
   for (let gIdx = 0; gIdx < outerWoodlandGroves.length; gIdx++) {
@@ -2034,8 +2045,8 @@ export function buildVegetationSystem() {
 
     for (let a = 0; a < maxAttempts && added < g.target; a++) {
       outerSeed++;
-      // Center-weighted radial distribution so groves have lush interlocking cores & organic soft fringes
-      const radial = Math.pow(seeded(outerSeed, 41), 0.68);
+      // Center-weighted distribution creates dense interlocking forest cores with natural feathered edges
+      const radial = Math.pow(seeded(outerSeed, 41), 0.74);
       const theta = seeded(outerSeed, 43) * Math.PI * 2;
       const lx = Math.cos(theta) * g.rx * radial;
       const lz = Math.sin(theta) * g.rz * radial;
@@ -2043,19 +2054,12 @@ export function buildVegetationSystem() {
       const z = g.cz + lx * sinG + lz * cosG;
 
       const dOut = signedDistOutsideCampus(x, z);
-      if (dOut < 10.0 || dOut > 235.0) continue;
+      if (dOut < 10.0 || dOut > 292.0) continue;
 
-      // Graceful radial density taper past d_out > 170m into the perimeter cloud veil
-      if (dOut > 170.0) {
-        const keepProb = THREE.MathUtils.lerp(1.0, 0.22, smoothstep(170, 235, dOut));
-        if (seeded(outerSeed, 47) > keepProb) continue;
-      }
-
-      const cloudSoften = dOut > 180 ? THREE.MathUtils.lerp(1.0, 0.84, smoothstep(180, 235, dOut)) : 1.0;
-      const scale = (g.sMin + seeded(outerSeed, 53) * (g.sMax - g.sMin)) * cloudSoften;
+      const scale = clampOuterScale(x, z, g.sMin + seeded(outerSeed, 53) * (g.sMax - g.sMin), dOut);
       const rot = seeded(outerSeed, 59) * Math.PI * 2;
       const isConifer = seeded(outerSeed, 61) < g.coniferRatio;
-      const spacing = 6.8 + (dOut > 165 ? 1.8 : 0.0);
+      const spacing = 4.9 + (radial > 0.78 ? 0.8 : 0.0);
 
       const ok = isConifer
         ? tryAddOuterConifer({ x, z, scale, rot, minSpacing: spacing })
@@ -2064,93 +2068,158 @@ export function buildVegetationSystem() {
             z,
             scale,
             rot,
-            species: pickOuterBroadleafSpecies(outerSeed, radial > 0.72 ? 0.04 : -0.02),
+            species: pickOuterBroadleafSpecies(outerSeed, radial > 0.75 ? 0.03 : -0.02),
             minSpacing: spacing,
           });
       if (ok) added++;
     }
   }
 
-  // Sub-layer 3: Countryside Hedgerow Tree Bands & Extended-Arterial Roadside Woodland Fringes
-  // Inspired by the crisp emerald field hedgerows in the aerial reference image
+  // Sub-layer 3: Continuous 360° Cloud-Horizon Forest Curtain (d_out ∈ [155m, 294m])
+  // Eliminates any bare grass ring before the cloud sea: dense undulating forest bands recede
+  // directly INTO the drifting perimeter clouds, softening gently only past d_out > 250m.
+  const hwCurtain = PLINTH_CONFIG.width * 0.5; // 243
+  const hdCurtain = PLINTH_CONFIG.depth * 0.5; // 184
+  const curtainBandSamples = 1800;
+  let curtainAdded = 0;
+  const curtainTarget = 420;
+
+  for (let c = 0; c < curtainBandSamples && curtainAdded < curtainTarget; c++) {
+    outerSeed++;
+    // Golden-angle quasi-random azimuth ensures 100% uniform 360° coverage across N/NE/E/SE/S/SW/W/NW
+    const angle = ((c * 2.399963229728653) % (Math.PI * 2)) + (seeded(outerSeed, 111) - 0.5) * 0.08;
+    const cosA = Math.cos(angle);
+    const sinA = Math.sin(angle);
+    // Project point onto campus superellipse rim then march outward by dBand ∈ [152m, 294m]
+    const rimDist = 1.0 / Math.hypot(cosA / hwCurtain, sinA / hdCurtain);
+    const waveEdge = 18.0 * Math.sin(angle * 7.0 + 0.6) + 12.0 * Math.cos(angle * 11.0 - 0.4);
+    const dBand = 152.0 + waveEdge + Math.pow(seeded(outerSeed, 113), 0.88) * 142.0;
+    const rTotal = rimDist + dBand;
+    const x = cosA * rTotal;
+    const z = sinA * rTotal;
+
+    const dOut = signedDistOutsideCampus(x, z);
+    if (dOut < 145.0 || dOut > 294.0) continue;
+
+    // Natural undulating forest mass modulation (keeps lush clustered continuity while avoiding artificial uniform grid)
+    const canopyWave =
+      Math.sin(x * 0.017 + z * 0.013) * 0.45 +
+      Math.cos(x * 0.012 - z * 0.021) * 0.35 +
+      Math.sin((x + z) * 0.029) * 0.20;
+    if (canopyWave < -0.48 && seeded(outerSeed, 117) > 0.25) continue;
+
+    // Taper smoothly only past d_out > 248m underneath the densest cloud sea
+    if (dOut > 248.0) {
+      const keepProb = THREE.MathUtils.lerp(1.0, 0.28, smoothstep(248, 294, dOut));
+      if (seeded(outerSeed, 119) > keepProb) continue;
+    }
+
+    const isEastSide = x > 210;
+    const coniferRatio = isEastSide ? 0.58 : 0.36;
+    const scale = clampOuterScale(x, z, 1.24 + seeded(outerSeed, 123) * 0.56, dOut);
+    const rot = seeded(outerSeed, 127) * Math.PI * 2;
+    const spacing = dOut > 255 ? 6.4 : 5.2;
+
+    const ok =
+      seeded(outerSeed, 131) < coniferRatio
+        ? tryAddOuterConifer({ x, z, scale, rot, minSpacing: spacing })
+        : tryAddOuterBroadleaf({
+            x,
+            z,
+            scale,
+            rot,
+            species: pickOuterBroadleafSpecies(outerSeed, -0.02),
+            minSpacing: spacing,
+          });
+    if (ok) curtainAdded++;
+  }
+
+  // Sub-layer 4: Continuous 2-Row Countryside Hedgerow Treeline Bands & Arterial Woodland Fringes
+  // Overlapping twin-row treelines inspired directly by the lush field hedgerows in the reference image
   const countrysideHedgerows = [
     // South & SE field hedgerows
-    { x1: -118, z1: 218, x2: 18, z2: 242, count: 10 },
-    { x1: 42, z1: 214, x2: 196, z2: 296, count: 11 },
-    { x1: 186, z1: 214, x2: 332, z2: 266, count: 9 },
+    { x1: -124, z1: 214, x2: 32, z2: 246, steps: 14 },
+    { x1: 38, z1: 212, x2: 224, z2: 312, steps: 15 },
+    { x1: 184, z1: 212, x2: 358, z2: 278, steps: 13 },
+    { x1: -215, z1: 298, x2: -42, z2: 336, steps: 12 },
     // West & SW field hedgerows
-    { x1: -286, z1: 44, x2: -412, z2: 112, count: 9 },
-    { x1: -278, z1: -88, x2: -418, z2: -58, count: 8 },
-    { x1: -288, z1: 204, x2: -190, z2: 336, count: 9 },
+    { x1: -282, z1: 42, x2: -462, z2: 128, steps: 14 },
+    { x1: -274, z1: -88, x2: -468, z2: -54, steps: 13 },
+    { x1: -286, z1: 202, x2: -178, z2: 378, steps: 13 },
     // North & NE field hedgerows
-    { x1: -168, z1: -222, x2: -28, z2: -316, count: 10 },
-    { x1: 44, z1: -214, x2: 192, z2: -312, count: 10 },
+    { x1: -176, z1: -218, x2: -18, z2: -348, steps: 14 },
+    { x1: 42, z1: -212, x2: 226, z2: -342, steps: 14 },
+    { x1: -328, z1: -194, x2: -454, z2: -282, steps: 11 },
   ];
 
   for (let hIdx = 0; hIdx < countrysideHedgerows.length; hIdx++) {
     const hr = countrysideHedgerows[hIdx];
-    for (let s = 0; s < hr.count; s++) {
-      outerSeed++;
-      const t = (s + 0.15 + seeded(outerSeed, 67) * 0.7) / hr.count;
-      const jitterPerp = (seeded(outerSeed, 71) - 0.5) * 11.0;
-      const dx = hr.x2 - hr.x1;
-      const dz = hr.z2 - hr.z1;
-      const len = Math.hypot(dx, dz) || 1;
-      const nx = -dz / len;
-      const nz = dx / len;
-      const x = hr.x1 + dx * t + nx * jitterPerp;
-      const z = hr.z1 + dz * t + nz * jitterPerp;
-      const dOut = signedDistOutsideCampus(x, z);
-      if (dOut < 12.0 || dOut > 205.0) continue;
+    const dx = hr.x2 - hr.x1;
+    const dz = hr.z2 - hr.z1;
+    const len = Math.hypot(dx, dz) || 1;
+    const nx = -dz / len;
+    const nz = dx / len;
 
-      const scale = 1.02 + seeded(outerSeed, 73) * 0.36;
-      const rot = seeded(outerSeed, 79) * Math.PI * 2;
-      const isConifer = seeded(outerSeed, 83) < 0.22;
-      if (isConifer) {
-        tryAddOuterConifer({ x, z, scale, rot, minSpacing: 6.4 });
-      } else {
-        tryAddOuterBroadleaf({
-          x,
-          z,
-          scale,
-          rot,
-          species: pickOuterBroadleafSpecies(outerSeed, 0.05),
-          minSpacing: 6.4,
-        });
+    for (let s = 0; s < hr.steps; s++) {
+      // Staggered twin-row hedgerow trees create lush continuous ribbons instead of isolated dots
+      for (let row = 0; row < 2; row++) {
+        outerSeed++;
+        const t = (s + row * 0.48 + seeded(outerSeed, 67) * 0.36) / hr.steps;
+        if (t > 1.0) continue;
+        const lateral = (row === 0 ? -3.4 : 3.4) + (seeded(outerSeed, 71) - 0.5) * 4.6;
+        const x = hr.x1 + dx * t + nx * lateral;
+        const z = hr.z1 + dz * t + nz * lateral;
+        const dOut = signedDistOutsideCampus(x, z);
+        if (dOut < 12.0 || dOut > 268.0) continue;
+
+        const scale = clampOuterScale(x, z, 1.08 + seeded(outerSeed, 73) * 0.44, dOut);
+        const rot = seeded(outerSeed, 79) * Math.PI * 2;
+        const isConifer = seeded(outerSeed, 83) < 0.24;
+        if (isConifer) {
+          tryAddOuterConifer({ x, z, scale, rot, minSpacing: 4.8 });
+        } else {
+          tryAddOuterBroadleaf({
+            x,
+            z,
+            scale,
+            rot,
+            species: pickOuterBroadleafSpecies(outerSeed, 0.03),
+            minSpacing: 4.8,
+          });
+        }
       }
     }
   }
 
-  // Intermittent countryside roadside tree clusters safely set back (halfW + 10.5..14.5m) along outer arterial extensions
+  // Clustered roadside woodland fringes set safely back (halfW + 10.2..15.2m) along outer arterial extensions
   for (let rIdx = 0; rIdx < extendedRoads.length; rIdx++) {
     const er = extendedRoads[rIdx];
-    const samples = 26;
+    const samples = 34;
     for (let i = 0; i < samples; i++) {
       outerSeed++;
-      const u = 0.06 + (i / (samples - 1)) * 0.88;
+      const u = 0.03 + (i / (samples - 1)) * 0.94;
       const pt = er.curve.getPointAt(u);
       const dOutCenter = signedDistOutsideCampus(pt.x, pt.z);
-      // Only place along the outer countryside extensions (strictly outside campus border, stopping before dense cloud mist)
-      if (dOutCenter < 12.0 || dOutCenter > 176.0) continue;
-      // Leave organic breathing gaps so roadside foliage reads as natural countryside copses
-      if (seeded(outerSeed, 89) < 0.38) continue;
+      if (dOutCenter < 12.0 || dOutCenter > 224.0) continue;
+      if (seeded(outerSeed, 89) < 0.28) continue;
 
       const tan = er.curve.getTangentAt(u).normalize();
       const side = seeded(outerSeed, 97) < 0.5 ? 1 : -1;
       const perpX = -tan.z * side;
       const perpZ = tan.x * side;
-      const offset = er.halfW + 10.6 + seeded(outerSeed, 101) * 4.2;
+      const offset = er.halfW + 10.4 + seeded(outerSeed, 101) * 5.2;
       const x = pt.x + perpX * offset;
       const z = pt.z + perpZ * offset;
-      const scale = 1.04 + seeded(outerSeed, 103) * 0.34;
+      const dOut = signedDistOutsideCampus(x, z);
+      const scale = clampOuterScale(x, z, 1.10 + seeded(outerSeed, 103) * 0.42, dOut);
       const rot = seeded(outerSeed, 107) * Math.PI * 2;
       tryAddOuterBroadleaf({
         x,
         z,
         scale,
         rot,
-        species: pickOuterBroadleafSpecies(outerSeed, 0.04),
-        minSpacing: 7.4,
+        species: pickOuterBroadleafSpecies(outerSeed, 0.02),
+        minSpacing: 5.4,
       });
     }
   }
