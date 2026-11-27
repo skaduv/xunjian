@@ -100,8 +100,15 @@ export class StudioScene {
 
     this.controls.addEventListener('start', () => {
       this.cameraAnim = null;
+      // 用户手动拖拽即打断无人机环绕巡航
+      if (this.orbit) this.stopOrbit({ reason: 'user' });
       this.wake(1200);
     });
+
+    // 无人机环绕巡航状态 & 画中画（摄像头实景预览）状态
+    this.orbit = null;
+    this.orbitListeners = new Set();
+    this.inset = null;
     this.controls.addEventListener('change', () => {
       this.wake(450);
     });
@@ -123,7 +130,7 @@ export class StudioScene {
   }
 
   isInteractiveActive() {
-    if (this.cameraAnim) return true;
+    if (this.cameraAnim || this.orbit) return true;
     if (
       Math.abs(this.targetMix.dusk - this.lightMix.dusk) > 0.0005 ||
       Math.abs(this.targetMix.night - this.lightMix.night) > 0.0005
@@ -442,6 +449,107 @@ export class StudioScene {
     );
   }
 
+  /**
+   * 无人机环绕巡航：先平滑飞抵环绕起点，再以恒定角速度绕园区中心环飞，伴随轻微高度起伏模拟航拍云台。
+   * @param {{center?:number[], radius?:number, height?:number, periodSec?:number, clockwise?:boolean}} opts
+   */
+  startOrbit(opts = {}) {
+    const center = new THREE.Vector3(...(opts.center || [-8, 0, 6]));
+    const radius = opts.radius ?? 360;
+    const height = opts.height ?? 175;
+    // 无人机云台广角镜头（主视图为 24° 长焦，环绕期间切换至 46° 广角，结束后恢复）
+    if (!this.orbit) this._baseFov = this.camera.fov;
+    this._fovTarget = opts.fov ?? 46;
+    const periodSec = Math.max(12, opts.periodSec ?? 60);
+    const dir = opts.clockwise ? -1 : 1;
+    // 从当前机位所在方位角起飞，避免镜头突兀跳变
+    const cur = this.camera.position.clone().sub(center);
+    const angle = Math.atan2(cur.z, cur.x);
+    const start = new THREE.Vector3(
+      center.x + Math.cos(angle) * radius,
+      center.y + height,
+      center.z + Math.sin(angle) * radius
+    );
+    this.flyTo(start, center, 1400);
+    this.orbit = {
+      center,
+      radius,
+      height,
+      periodSec,
+      dir,
+      angle,
+      elapsed: 0,
+      warmup: 1.4,
+    };
+    this.controls.enabled = true;
+    this.wake(2000);
+    for (const cb of this.orbitListeners) cb(true, null);
+  }
+
+  setOrbitParams({ periodSec, height, radius } = {}) {
+    if (!this.orbit) return;
+    if (typeof periodSec === 'number') this.orbit.periodSec = Math.max(12, periodSec);
+    if (typeof height === 'number') this.orbit.height = height;
+    if (typeof radius === 'number') this.orbit.radius = radius;
+  }
+
+  stopOrbit({ reason = 'api' } = {}) {
+    if (!this.orbit) return;
+    this.orbit = null;
+    // 广角恢复为主视图长焦：保持画面主体大小不突变，同步把机位按焦距比例推远
+    if (this._baseFov) {
+      const ratio =
+        Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2) /
+        Math.tan(THREE.MathUtils.degToRad(this._baseFov) / 2);
+      const off = this.camera.position.clone().sub(this.controls.target);
+      const dist = THREE.MathUtils.clamp(off.length() * ratio, this.controls.minDistance, this.controls.maxDistance);
+      const dest = this.controls.target.clone().add(off.setLength(dist));
+      this._fovTarget = this._baseFov;
+      if (reason === 'user') {
+        // 用户拖拽打断：同帧瞬切焦距与机位（主体画幅不变），避免与手势抢镜头
+        this.camera.position.copy(dest);
+        this.camera.fov = this._baseFov;
+        this.camera.updateProjectionMatrix();
+      } else {
+        this.flyTo(dest, this.controls.target.clone(), 900);
+      }
+    }
+    this.wake(600);
+    for (const cb of this.orbitListeners) cb(false, reason);
+  }
+
+  isOrbiting() {
+    return Boolean(this.orbit);
+  }
+
+  onOrbitChange(cb) {
+    this.orbitListeners.add(cb);
+    return () => this.orbitListeners.delete(cb);
+  }
+
+  _updateOrbit(dt) {
+    const o = this.orbit;
+    if (!o) return;
+    o.elapsed += dt;
+    if (o.elapsed < o.warmup || this.cameraAnim) return; // 等待飞抵起点
+    o.angle += o.dir * dt * ((Math.PI * 2) / o.periodSec);
+    const bob = Math.sin(o.elapsed * 0.55) * 6;
+    this.camera.position.set(
+      o.center.x + Math.cos(o.angle) * o.radius,
+      o.center.y + o.height + bob,
+      o.center.z + Math.sin(o.angle) * o.radius
+    );
+    this.controls.target.copy(o.center);
+  }
+
+  /**
+   * 画中画：在主画布指定屏幕矩形内追加渲染一路摄像头视角（scissor 视口，零额外 WebGL 上下文）
+   * @param {null | {camera: THREE.Camera, rect: {x:number,y:number,w:number,h:number}, hide?: THREE.Object3D[]}} inset
+   */
+  setInset(inset) {
+    this.inset = inset || null;
+  }
+
   projectToScreen(worldPos) {
     const v = this._tmpProj.copy(worldPos).project(this.camera);
     const visible = v.z >= -1 && v.z <= 1 && v.x >= -1.05 && v.x <= 1.05 && v.y >= -1.05 && v.y <= 1.05;
@@ -471,6 +579,13 @@ export class StudioScene {
       this.camera.position.lerpVectors(this.cameraAnim.fromPos, this.cameraAnim.toPos, t);
       this.controls.target.lerpVectors(this.cameraAnim.fromTarget, this.cameraAnim.toTarget, t);
       if (rawT >= 1) this.cameraAnim = null;
+    }
+    this._updateOrbit(dt);
+    if (typeof this._fovTarget === 'number' && Math.abs(this.camera.fov - this._fovTarget) > 0.01) {
+      this.camera.fov += (this._fovTarget - this.camera.fov) * Math.min(1, dt * 3.2);
+      if (Math.abs(this.camera.fov - this._fovTarget) <= 0.01) this.camera.fov = this._fovTarget;
+      this.camera.updateProjectionMatrix();
+      this.wake(200);
     }
 
     this.controls.update();
@@ -569,6 +684,37 @@ export class StudioScene {
 
   render() {
     this.renderer.render(this.scene, this.camera);
+    const inset = this.inset;
+    if (!inset || !inset.camera || !inset.rect) return;
+    const { x, y, w, h } = inset.rect;
+    if (w < 8 || h < 8) return;
+    const r = this.renderer;
+    const prevAutoClear = r.autoClear;
+    const hidden = [];
+    for (const obj of inset.hide || []) {
+      if (obj.visible) {
+        obj.visible = false;
+        hidden.push(obj);
+      }
+    }
+    const shadowAuto = r.shadowMap.autoUpdate;
+    r.shadowMap.autoUpdate = false;
+    const prevNeeds = r.shadowMap.needsUpdate;
+    r.shadowMap.needsUpdate = false;
+    inset.camera.aspect = w / h;
+    inset.camera.updateProjectionMatrix();
+    const glY = this.height - y - h; // WebGL 视口原点在左下
+    r.setScissorTest(true);
+    r.setScissor(x, glY, w, h);
+    r.setViewport(x, glY, w, h);
+    r.autoClear = true;
+    r.render(this.scene, inset.camera);
+    r.setScissorTest(false);
+    r.setViewport(0, 0, this.width, this.height);
+    r.autoClear = prevAutoClear;
+    r.shadowMap.autoUpdate = shadowAuto;
+    r.shadowMap.needsUpdate = prevNeeds;
+    for (const obj of hidden) obj.visible = true;
   }
 
   _handleResize() {
