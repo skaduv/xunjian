@@ -319,7 +319,7 @@ export class StudioScene {
       rimIntensity: 0.34,
       exposure: 1.08,
       envIntensity: 0.38,
-      fogColor: new THREE.Color('#070f1d'),
+      fogColor: new THREE.Color('#050a15'),
       fogNear: 1260,
       fogFar: 2250,
     };
