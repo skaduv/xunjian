@@ -1871,7 +1871,7 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
 
   const islandTurf = new THREE.Mesh(
     new THREE.CylinderGeometry(2.86, 2.94, 0.25, 28),
-    new THREE.MeshStandardMaterial({ color: '#417836', roughness: 0.85, metalness: 0.0 })
+    new THREE.MeshStandardMaterial({ color: '#36662d', roughness: 0.85, metalness: 0.0 })
   );
   islandTurf.scale.set(1.0, 1, 2.62);
   islandTurf.position.set(26, 0.125, -112);
