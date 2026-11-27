@@ -45,7 +45,7 @@ export class StudioScene {
     this.renderer.shadowMap.needsUpdate = true;
 
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.0;
+    this.renderer.toneMappingExposure = 0.96;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.appendChild(this.renderer.domElement);
 
@@ -193,7 +193,7 @@ export class StudioScene {
     const rt = pmrem.fromScene(envScene, 0.04);
     this.scene.environment = rt.texture;
     if ('environmentIntensity' in this.scene) {
-      this.scene.environmentIntensity = 0.48;
+      this.scene.environmentIntensity = 0.44;
     }
     this.envRenderTarget = rt;
 
@@ -239,12 +239,12 @@ export class StudioScene {
   }
 
   _buildLightingRig() {
-    // 清透晴空天光 + 深翡翠林地反射半球光：彻底消除泛白发灰，令树影与草坡饱满浓郁、层次分明
-    this.hemiLight = new THREE.HemisphereLight('#d9ecff', '#1e3d22', 0.50);
+    // 清透晴空天光 + 更深沉的森林暗绿反射半球光：强对比航拍质感，适配深色磨砂玻璃仪表盘美学
+    this.hemiLight = new THREE.HemisphereLight('#d4e9ff', '#152e18', 0.42);
     this.scene.add(this.hemiLight);
 
-    // 低仰角斜射暖金航拍日光 + 紧包围 2048×2048 柔化按需刷新阴影（约 4.5:1 戏剧光影反差，拉出雕塑感树影与建筑投影）
-    this.sunLight = new THREE.DirectionalLight('#fff1d6', 2.45);
+    // 低仰角斜射暖金航拍日光 + 紧包围 2048×2048 柔化按需刷新阴影（约 5.5:1 戏剧航拍光影反差，雕塑感树影与浓郁叶绿素高光）
+    this.sunLight = new THREE.DirectionalLight('#fff0d4', 2.65);
     this.sunLight.position.set(-265, 205, 165);
     this.sunLight.castShadow = true;
     this.sunLight.shadow.mapSize.set(2048, 2048);
@@ -259,29 +259,29 @@ export class StudioScene {
     this.sunLight.shadow.normalBias = 0.045;
     this.scene.add(this.sunLight);
 
-    // 东北侧冷蓝晴空辅助补光（轻柔通透地衬托林荫暗部，绝不洗白阴影深度）
-    this.fillLight = new THREE.DirectionalLight('#9cc4e4', 0.24);
+    // 东北侧冷蓝晴空辅助补光（克制补光，留足深林暗部反差）
+    this.fillLight = new THREE.DirectionalLight('#96bfe0', 0.21);
     this.fillLight.position.set(245, 135, -185);
     this.scene.add(this.fillLight);
 
-    // 柔和叶绿素轮廓背光（轻提树冠边缘与建筑倒角立体感）
-    this.rimLight = new THREE.DirectionalLight('#e4f5ea', 0.24);
+    // 柔和叶绿素轮廓背光（轻提树冠向光轮廓与建筑倒角立体感）
+    this.rimLight = new THREE.DirectionalLight('#dff2e6', 0.20);
     this.rimLight.position.set(145, 95, 240);
     this.scene.add(this.rimLight);
 
     this.dayLighting = {
-      hemiSky: new THREE.Color('#d9ecff'),
-      hemiGround: new THREE.Color('#1e3d22'),
-      hemiIntensity: 0.50,
-      sunColor: new THREE.Color('#fff1d6'),
-      sunIntensity: 2.45,
+      hemiSky: new THREE.Color('#d4e9ff'),
+      hemiGround: new THREE.Color('#152e18'),
+      hemiIntensity: 0.42,
+      sunColor: new THREE.Color('#fff0d4'),
+      sunIntensity: 2.65,
       sunPos: new THREE.Vector3(-265, 205, 165),
-      fillColor: new THREE.Color('#9cc4e4'),
-      fillIntensity: 0.24,
-      rimColor: new THREE.Color('#e4f5ea'),
-      rimIntensity: 0.24,
-      exposure: 1.0,
-      envIntensity: 0.48,
+      fillColor: new THREE.Color('#96bfe0'),
+      fillIntensity: 0.21,
+      rimColor: new THREE.Color('#dff2e6'),
+      rimIntensity: 0.20,
+      exposure: 0.96,
+      envIntensity: 0.44,
       fogColor: new THREE.Color('#dde5e0'),
       fogNear: 1220,
       fogFar: 2150,
