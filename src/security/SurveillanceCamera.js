@@ -20,12 +20,13 @@ import * as THREE from 'three';
  */
 
 export const CAMERA_STATE_STYLES = {
-  online: { color: '#c7f26a', label: '在线', fov: '#c7f26a', fovOpacity: 0.16, pulse: false },
-  offline: { color: '#8a9089', label: '离线', fov: '#8a9089', fovOpacity: 0.06, pulse: false },
-  muted: { color: '#b7bcb2', label: '静默', fov: '#b7bcb2', fovOpacity: 0.08, pulse: false },
-  alarm_critical: { color: '#ff5a4f', label: '紧急告警', fov: '#ff5a4f', fovOpacity: 0.24, pulse: true, speed: 1.6 },
-  alarm_order: { color: '#ffb547', label: '工单告警', fov: '#ffb547', fovOpacity: 0.22, pulse: true, speed: 1.2 },
-  tamper: { color: '#c08bff', label: '遮挡/篡改', fov: '#c08bff', fovOpacity: 0.22, pulse: true, speed: 2.0 },
+  // 与 HUD 设计令牌一致：中性石墨底 + 电光蓝品牌色，异常态才使用语义色
+  online: { color: '#4d9fff', label: '在线', fov: '#5aaeff', fovOpacity: 0.15, pulse: false },
+  offline: { color: '#8b93a1', label: '离线', fov: '#8b93a1', fovOpacity: 0.06, pulse: false },
+  muted: { color: '#aab2bf', label: '静默', fov: '#aab2bf', fovOpacity: 0.08, pulse: false },
+  alarm_critical: { color: '#f87171', label: '紧急告警', fov: '#ff6b6b', fovOpacity: 0.22, pulse: true, speed: 1.6 },
+  alarm_order: { color: '#fbbf24', label: '工单告警', fov: '#fbbf24', fovOpacity: 0.2, pulse: true, speed: 1.2 },
+  tamper: { color: '#a78bfa', label: '遮挡/篡改', fov: '#a78bfa', fovOpacity: 0.2, pulse: true, speed: 2.0 },
 };
 
 const STATE_ALIASES = { normal: 'online', alarm: 'alarm_critical' };
@@ -42,54 +43,76 @@ export function normalizeCameraState(state) {
 let sharedAssets = null;
 
 function drawPinTexture(color, selected) {
-  const size = 128;
+  // 高分辨率水滴形定位钉：石墨玻璃底 + 状态色描边/图标 + 底部尖角，sprite 中心对齐尖角
+  const W = 160;
+  const H = 200;
   const c = document.createElement('canvas');
-  c.width = size;
-  c.height = size;
+  c.width = W;
+  c.height = H;
   const g = c.getContext('2d');
-  const cx = size / 2;
-  const cy = size / 2;
+  const cx = W / 2;
+  const r = selected ? 50 : 44;
+  const cy = H - 12 - r * 1.62;
 
-  // 外层磨砂光晕
-  const halo = g.createRadialGradient(cx, cy, 20, cx, cy, 62);
-  halo.addColorStop(0, hexA(color, selected ? 0.55 : 0.32));
-  halo.addColorStop(1, hexA(color, 0));
-  g.fillStyle = halo;
-  g.beginPath();
-  g.arc(cx, cy, 62, 0, Math.PI * 2);
+  // 柔和投影
+  g.save();
+  g.shadowColor = 'rgba(0, 0, 0, 0.45)';
+  g.shadowBlur = 18;
+  g.shadowOffsetY = 6;
+  pinPath(g, cx, cy, r);
+  g.fillStyle = 'rgba(16, 18, 22, 0.92)';
+  g.fill();
+  g.restore();
+
+  // 玻璃高光
+  const sheen = g.createLinearGradient(0, cy - r, 0, cy + r);
+  sheen.addColorStop(0, 'rgba(255, 255, 255, 0.16)');
+  sheen.addColorStop(0.55, 'rgba(255, 255, 255, 0.02)');
+  pinPath(g, cx, cy, r);
+  g.fillStyle = sheen;
   g.fill();
 
-  // 深色玻璃底盘 + 状态色描边
-  g.fillStyle = 'rgba(18, 21, 16, 0.86)';
-  g.beginPath();
-  g.arc(cx, cy, 34, 0, Math.PI * 2);
-  g.fill();
-  g.lineWidth = selected ? 7 : 5;
+  g.lineWidth = selected ? 6 : 4;
   g.strokeStyle = color;
+  pinPath(g, cx, cy, r);
   g.stroke();
 
-  // 摄像头图标（机身 + 镜头 + 支架）
+  // 内圈状态色实心圆 + 摄像头图标
+  g.beginPath();
+  g.arc(cx, cy, r * 0.62, 0, Math.PI * 2);
   g.fillStyle = color;
-  roundRect(g, cx - 17, cy - 10, 26, 16, 4);
-  g.fill();
-  g.beginPath();
-  g.moveTo(cx + 9, cy - 4);
-  g.lineTo(cx + 19, cy - 10);
-  g.lineTo(cx + 19, cy + 6);
-  g.lineTo(cx + 9, cy);
-  g.closePath();
-  g.fill();
-  g.fillRect(cx - 7, cy + 6, 4, 9);
-  g.fillRect(cx - 12, cy + 13, 14, 4);
-  g.fillStyle = 'rgba(18, 21, 16, 0.9)';
-  g.beginPath();
-  g.arc(cx - 4, cy - 2, 4, 0, Math.PI * 2);
   g.fill();
 
+  const s = r / 44;
+  g.save();
+  g.translate(cx, cy);
+  g.scale(s, s);
+  g.fillStyle = 'rgba(12, 14, 18, 0.95)';
+  roundRect(g, -14, -8, 19, 16, 3.5);
+  g.fill();
+  g.beginPath();
+  g.moveTo(6, -2.5);
+  g.lineTo(14, -7);
+  g.lineTo(14, 7);
+  g.lineTo(6, 2.5);
+  g.closePath();
+  g.fill();
+  g.restore();
+
+  // 尖角地面锚点
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
   return tex;
+}
+
+function pinPath(g, cx, cy, r) {
+  const tipY = cy + r * 1.62;
+  const a = Math.asin(r / (tipY - cy));
+  g.beginPath();
+  g.moveTo(cx, tipY);
+  g.arc(cx, cy, r, Math.PI / 2 + a, Math.PI / 2 - a + Math.PI * 2, false);
+  g.closePath();
 }
 
 function roundRect(g, x, y, w, h, r) {
@@ -202,7 +225,7 @@ function buildFrustum(spec) {
     vertexShader: FRUSTUM_VERT,
     fragmentShader: FRUSTUM_FRAG,
     uniforms: {
-      uColor: { value: new THREE.Color('#c7f26a') },
+      uColor: { value: new THREE.Color('#4d9fff') },
       uOpacity: { value: 0.16 },
       uTime: { value: 0 },
     },
@@ -223,7 +246,7 @@ function buildFrustum(spec) {
   }
   const edgeGeo = new THREE.BufferGeometry();
   edgeGeo.setAttribute('position', new THREE.Float32BufferAttribute(edgePts, 3));
-  const edgeMat = new THREE.LineBasicMaterial({ color: '#c7f26a', transparent: true, opacity: 0.75, depthWrite: false });
+  const edgeMat = new THREE.LineBasicMaterial({ color: '#4d9fff', transparent: true, opacity: 0.75, depthWrite: false });
   const edges = new THREE.LineSegments(edgeGeo, edgeMat);
   edges.name = 'FrustumEdges';
   edges.renderOrder = 21;
@@ -301,6 +324,8 @@ function buildHardware(spec, assets) {
 /* 组件工厂                                                           */
 /* ------------------------------------------------------------------ */
 
+const PIN_SIZE = 0.036;
+
 const DEFAULT_SPEC = {
   type: 'bullet',
   floor: 'outdoor',
@@ -346,7 +371,7 @@ export function createSurveillanceCamera(rawSpec, opts = {}) {
   const footprintGeo = new THREE.BufferGeometry();
   footprintGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(6 * 3), 3));
   const footprintMat = new THREE.MeshBasicMaterial({
-    color: '#c7f26a',
+    color: '#4d9fff',
     transparent: true,
     opacity: 0.2,
     depthWrite: false,
@@ -362,7 +387,7 @@ export function createSurveillanceCamera(rawSpec, opts = {}) {
   footprintLineGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(5 * 3), 3));
   const footprintLine = new THREE.Line(
     footprintLineGeo,
-    new THREE.LineBasicMaterial({ color: '#c7f26a', transparent: true, opacity: 0.9, depthWrite: false })
+    new THREE.LineBasicMaterial({ color: '#4d9fff', transparent: true, opacity: 0.9, depthWrite: false })
   );
   footprintLine.frustumCulled = false;
   footprintLine.renderOrder = 19;
@@ -383,18 +408,18 @@ export function createSurveillanceCamera(rawSpec, opts = {}) {
     transparent: true,
   });
   const pin = new THREE.Sprite(pinMat);
-  pin.center.set(0.5, 0.5);
-  pin.scale.set(0.026, 0.026, 1);
+  pin.center.set(0.5, 0.06); // 水滴尖角对准引线顶端
+  pin.scale.set(PIN_SIZE * 0.8, PIN_SIZE, 1);
   pin.position.set(spec.position[0], spec.position[1] + spec.markerHeight, spec.position[2]);
   pin.renderOrder = 40;
   pin.userData.cameraId = spec.id;
 
   const leaderGeo = new THREE.BufferGeometry().setFromPoints([
     new THREE.Vector3(spec.position[0], spec.position[1] + 0.4, spec.position[2]),
-    new THREE.Vector3(spec.position[0], spec.position[1] + spec.markerHeight - 0.6, spec.position[2]),
+    new THREE.Vector3(spec.position[0], spec.position[1] + spec.markerHeight, spec.position[2]),
   ]);
   const leaderMat = new THREE.LineDashedMaterial({
-    color: '#c7f26a',
+    color: '#4d9fff',
     dashSize: 0.5,
     gapSize: 0.35,
     transparent: true,
@@ -406,7 +431,7 @@ export function createSurveillanceCamera(rawSpec, opts = {}) {
   leader.renderOrder = 39;
 
   const ringMat = new THREE.MeshBasicMaterial({
-    color: '#c7f26a',
+    color: '#4d9fff',
     transparent: true,
     opacity: 0.0,
     depthWrite: false,
@@ -472,8 +497,8 @@ export function createSurveillanceCamera(rawSpec, opts = {}) {
     const style = CAMERA_STATE_STYLES[state];
     pinMat.map = assets.getPinTexture(state, selected);
     pinMat.needsUpdate = true;
-    pin.scale.setScalar(selected ? 0.036 : 0.026);
-    pin.scale.z = 1;
+    const k = selected ? 1.3 : 1;
+    pin.scale.set(PIN_SIZE * 0.8 * k, PIN_SIZE * k, 1);
     leaderMat.color.set(style.color);
     ringMat.color.set(style.color);
     frustum.mat.uniforms.uColor.value.set(style.fov);

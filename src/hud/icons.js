@@ -37,7 +37,10 @@ import i31 from '../../node_modules/@shoelace-style/shoelace/dist/assets/icons/c
 import i32 from '../../node_modules/@shoelace-style/shoelace/dist/assets/icons/stack.svg?raw';
 import i33 from '../../node_modules/@shoelace-style/shoelace/dist/assets/icons/pin-map.svg?raw';
 
+import iGrid from '../../node_modules/@shoelace-style/shoelace/dist/assets/icons/grid-1x2.svg?raw';
+
 const ICONS = {
+  'grid-1x2': iGrid,
   'camera-video': i0,
   'camera-video-fill': i1,
   'airplane': i2,

@@ -313,6 +313,14 @@ export function createCampusTwinAPI({
       return architecture.getFloorView();
     },
 
+    getLightingMode() {
+      return studio.lightingMode;
+    },
+
+    isExploded() {
+      return architecture.isExploded();
+    },
+
     /** 拆层展开时每层楼的标签锚点（世界坐标），供 HUD 绘制「1F / 2F / 3F / 屋顶」浮标 */
     getFloorAnchors() {
       const f = architecture.getExplodeFactor();
@@ -343,6 +351,7 @@ export function createCampusTwinAPI({
     setLightingMode(mode, options) {
       const normalized = mode === 'night' ? 'night' : mode === 'dusk' ? 'dusk' : 'day';
       studio.setLightingMode(normalized, options);
+      emit('lighting', normalized);
       return normalized;
     },
 
