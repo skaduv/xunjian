@@ -3,22 +3,22 @@ import { PLINTH_CONFIG } from '../config/campusConfig.js';
 import { createMowedLawnTexture } from '../core/ProceduralTextures.js';
 
 /**
- * 无界自然翡翠外围地貌 + 多层动态体积航拍云海渐隐系统（取代旧硬件底座托盘）
+ * 无界自然翡翠外围地貌 + 地形自适应飘逸风缕体积航拍云海系统（QA #44 深度精修版）
  *
- * 核心设计（对齐参考图与 BOUNDLESS CLOUD-FADE & HEALTHY-EMERALD SPEC #38）：
+ * 核心特性：
  * 1. 保留导出 `createRoundedRectShape` 与 `buildHardwarePlinth()` 完整签名（100% 兼容 main.js 与 TerrainAndStructures.js），
- *    并新增导出 `sampleOuterTerrainHeight(x, z)` 供外围森林树木无缝生根贴地。
- * 2. 无缝外围绿野（~2300m × 2200m）：
- *    - 内缘精确对齐圆角矩形 486×368 (r=26, curveSegments=20)，与园区草坪 y=0.000 零阶差、零法线折痕、同世界坐标 UV 无缝衔接；
- *    - 2.2m 内收防裂压边沉于 y=-0.05，完全避开中心湖泊与 1BF 车库深坑，并附带 y=-3.65 地下防漏光封底；
- *    - 沿三条外延市政干道（中关村大道、平陵西路、永平大道）±26m 走廊严格保持平直 y=0.000；
- *    - 远离园区后渐变展现参考图同款健康叶绿素航拍田野/林地色阶韵律与缓坡丘陵（东侧自然延续龙蟠山余脉），
- *      在 d_out ≈ 235..540m 经有机噪波扰动平滑溶入场景雾色（白昼/暮光/星夜全同步），视觉彻底无界！
- * 3. 多层动态体积航拍云海（userData.noMerge = true，共 4 个透明渲染层，极低 Draw Call）：
- *    - 双层程序化 FBM 体积云海帷幕（y=7m & y=17m）：中心园区完全清澈通透，周边呈有机卷云浪花向阳亮顶 + 冷灰青暗底，
- *      彻底柔化园区边缘并向天际渐隐；
- *    - 3D 多片层视差积云团阵列（y=22..44m，单次 Draw Call）：沿四角与外围山麓/草甸柔和漂浮，自带体积受光与自阴影；
- *    - 高空轻盈薄云丝缕（y=52m）：精致航拍薄云飘过外缘树冠与草野，昼/暮/夜丝滑变色，星夜下转为沉静月光靛云不遮星空。
+ *    并导出 `sampleOuterTerrainHeight(x, z)` 与 `distOutsideCampus(x, z)` 供外围森林与道路模块无缝对齐。
+ * 2. 无缝外围自然田野林地（~2300m × 2200m）：
+ *    - 内缘精确对齐 24 段圆角矩形 486×368 (r=26)，与园区草坪 y=0.000 零阶差、零法线折痕、同世界坐标 UV 衔接；
+ *    - d_out > 18..78m 平滑淡出重复草坪贴图，无缝过渡至无重复多倍频 FBM 航拍田野/深林地/健康草甸色阶（#22481f / #34622a / #4d7b34），
+ *      彻底消除 2km 大尺度重复条纹与塑料感；
+ *    - 远端 d_out ≈ 185..435m（有机噪波扰动）平滑溶入场景雾色，500..680m 强制 100% 融入地平线。
+ * 3. 全地形避让的飘逸风缕体积航拍云海（userData.noMerge = true）：
+ *    - 全部云海网格随地形自动抬升（Lower >= max(22.5, h+6.5), Upper >= max(34.0, h+14.0), Cirrus >= max(54.0, h+24.0)），
+ *      彻底杜绝东侧丘陵切穿云片形成硬边绿洞！
+ *    - 扩大至 3000×3000 网格 + 双重边界柔化（outerFadeEnd <= 820m + radialGuard 820..1260m），星夜拉远 0 方形云边！
+ *    - 35° 风向拉伸羽化 FBM 连续流云帷幕为主角 + 18 条细长 (2.6:1) 双片层轻柔风缕薄云带自然融汇其中，告别孤立棉球与橙色薄饼；
+ *    - 昼/暮/夜三态精准校准：白昼清透蓬松暖白云海，暮光克制微暖暮云，星夜沉静深靛月雾（0 蓝灰斑点，星夜通透）。
  */
 
 function clamp(v, lo, hi) {
@@ -50,7 +50,7 @@ export function createRoundedRectShape(width, depth, radius) {
   return shape;
 }
 
-// 三条外延市政主干道精准中心折线（与 @road-horizon / @lush-trees 规范 #38 严格一致，并沿末端自然延续防远端隆起）
+// 三条外延市政主干道精准中心折线（与 @road-horizon / @lush-trees 规范 #38 严格一致）
 const EXTENDED_ARTERIAL_POLYLINES = [
   // 1. 中关村大道 (width = 17.5m)
   [
@@ -140,10 +140,10 @@ export function distOutsideCampus(x, z) {
 }
 
 /**
- * 园区外围无界自然地貌精确高度函数（供外围地形网格与 @lush-trees 外围林带树木共享，100% 同步贴地）
+ * 园区外围无界自然地貌精确高度函数（供外围地形网格、高程自适应云层与 @lush-trees 外围林带共享）
  * - 园区内及外缘 22m 过渡带严格 y = 0.000
  * - 三条外延市政主干道 ±26m 路基走廊严格 y = 0.000
- * - 远处 d_out > 520m 平滑回落至 0，令远景云雾地平线水平无突兀
+ * - 远处 d_out > 520m 平滑回落至 0，确保远景地平线平稳
  */
 export function sampleOuterTerrainHeight(x, z) {
   const dOut = distOutsideCampus(x, z);
@@ -175,9 +175,7 @@ export function sampleOuterTerrainHeight(x, z) {
 }
 
 /**
- * 精确采样与 createRoundedRectShape(486, 368, 26) 顶点 1:1 吻合的圆角矩形外轮廓点列与单位外法线
- * 遍历顺序：南边(W->E) -> 东南圆角 -> 东边(S->N) -> 东北圆角 -> 北边(E->W) -> 西北圆角 -> 西边(N->S) -> 西南圆角
- * 外法线 N = (-Tz, +Tx)，确保环带网格全部三角面法线严格朝上 (+Y)
+ * 精确采样与 createRoundedRectShape(486, 368, 26) + ShapeGeometry(lawnShape, 24) 顶点 1:1 吻合的外轮廓点列与单位外法线
  */
 function sampleCampusPerimeterWithNormals() {
   const hw = PLINTH_CONFIG.width * 0.5; // 243
@@ -200,7 +198,6 @@ function sampleCampusPerimeterWithNormals() {
     }
   };
 
-  // 与 THREE.Shape.quadraticCurveTo + ShapeGeometry(lawnShape, 24) 完全一致的二次贝塞尔圆角
   const pushQuadCorner = (x0, z0, cx, cz, x1, z1, segs = 24) => {
     for (let i = 0; i < segs; i++) {
       const t = i / segs;
@@ -210,7 +207,6 @@ function sampleCampusPerimeterWithNormals() {
       const tx = 2 * omt * (cx - x0) + 2 * t * (x1 - cx);
       const tz = 2 * omt * (cz - z0) + 2 * t * (z1 - cz);
       const len = Math.hypot(tx, tz) || 1;
-      // 外法线 N = (-tz, +tx) / len
       pts.push({
         x,
         z,
@@ -233,13 +229,12 @@ function sampleCampusPerimeterWithNormals() {
 }
 
 /**
- * 1. 构建无缝无界外围自然翡翠地形（~2300m × 2200m 同心扩展环带网格，零拼缝、零台阶、自然田野林地层次 + 雾效溶边）
+ * 1. 构建无缝无界外围自然翡翠地形（~2300m × 2200m，外缘平滑告别重复草坪纹理、转入非周期 FBM 航拍田野与林地色阶）
  */
 function buildBoundlessOuterTerrain(sharedUniforms) {
   const perimeter = sampleCampusPerimeterWithNormals();
   const P = perimeter.length;
 
-  // 径向偏移序列：k=0 内收防裂沉唇 (-2.2m @ y=-0.05)，k=1 精准边界 (0.0m @ y=0.000)，向外平滑扩展至 +940m
   const ringOffsets = [
     -2.2, 0.0, 6.0, 15.0, 24.0, 35.0, 48.0, 63.0, 80.0, 100.0, 122.0, 146.0,
     172.0, 200.0, 232.0, 266.0, 304.0, 346.0, 392.0, 444.0, 502.0, 568.0,
@@ -270,7 +265,7 @@ function buildBoundlessOuterTerrain(sharedUniforms) {
       positions[idx * 3 + 1] = wy;
       positions[idx * 3 + 2] = wz;
 
-      // 与 TerrainAndStructures.js 完全一致的世界坐标草坪 UV 映射（零纹理相位接缝！）
+      // 与 TerrainAndStructures.js 完全一致的世界坐标草坪 UV 映射（零纹理相位接缝）
       uvs[idx * 2] = (wx + halfW) * invW;
       uvs[idx * 2 + 1] = (wz + halfD) * invD;
     }
@@ -285,7 +280,6 @@ function buildBoundlessOuterTerrain(sharedUniforms) {
       const b = rowA + sNext;
       const c = rowB + s;
       const d = rowB + sNext;
-      // 严格朝上 +Y 绕序：(c - a) × (b - a) = N × T = +Y
       indices.push(a, c, b, b, c, d);
     }
   }
@@ -296,12 +290,11 @@ function buildBoundlessOuterTerrain(sharedUniforms) {
   geo.setIndex(indices);
   geo.computeVertexNormals();
 
-  // 关键接缝消除：强制内收唇 (k=0) 与精准边界环 (k=1) 法线严格垂直向上 (0,1,0)，杜绝边界处 1px 光照折痕
+  // 强制内收唇 (k=0) 与精准边界环 (k=1) 法线严格垂直向上 (0,1,0)，彻底消除边界 1px 光照折痕
   const normAttr = geo.attributes.normal;
   for (let k = 0; k <= 1; k++) {
     for (let s = 0; s < P; s++) {
-      const idx = k * P + s;
-      normAttr.setXYZ(idx, 0, 1, 0);
+      normAttr.setXYZ(k * P + s, 0, 1, 0);
     }
   }
   normAttr.needsUpdate = true;
@@ -316,11 +309,21 @@ function buildBoundlessOuterTerrain(sharedUniforms) {
     envMapIntensity: 0.85,
   });
 
-  terrainMat.customProgramCacheKey = () => 'ioply-boundless-outer-terrain-v1';
+  terrainMat.customProgramCacheKey = () => 'ioply-boundless-outer-terrain-v2';
+
+  // 将外围参考图色板预先由 sRGB 精确转换至线性空间传入着色器
+  const colWoodFloor = new THREE.Color('#22481f');
+  const colMidMeadow = new THREE.Color('#34622a');
+  const colSunField = new THREE.Color('#4d7b34');
+  const colDeepShade = new THREE.Color('#193818');
 
   terrainMat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = sharedUniforms.uTime;
     shader.uniforms.uDayWeight = sharedUniforms.uDayWeight;
+    shader.uniforms.uColWoodFloor = { value: colWoodFloor };
+    shader.uniforms.uColMidMeadow = { value: colMidMeadow };
+    shader.uniforms.uColSunField = { value: colSunField };
+    shader.uniforms.uColDeepShade = { value: colDeepShade };
 
     shader.vertexShader = shader.vertexShader
       .replace(
@@ -342,6 +345,10 @@ function buildBoundlessOuterTerrain(sharedUniforms) {
         `#include <common>
         uniform float uTime;
         uniform float uDayWeight;
+        uniform vec3 uColWoodFloor;
+        uniform vec3 uColMidMeadow;
+        uniform vec3 uColSunField;
+        uniform vec3 uColDeepShade;
         varying vec3 vOuterWorldPos;
 
         float ot_hash( vec2 p ) {
@@ -385,42 +392,47 @@ function buildBoundlessOuterTerrain(sharedUniforms) {
         vec2 otXz = vOuterWorldPos.xz;
         float otDOut = ot_distOutsideCampus( otXz );
 
-        // 距离边界 16m 内 100% 保持原园区草坪原色，16..70m 平滑展开参考图同款航拍田野/生态林草色阶韵律
-        float patchMask = smoothstep( 16.0, 72.0, otDOut );
-        if ( patchMask > 0.001 ) {
-          // 顺应平陵西路/永平大道天然倾角 (~19°) 的自然生态农林地块肌理
-          vec2 rotXz = vec2( otXz.x * 0.9455 - otXz.y * 0.3256, otXz.x * 0.3256 + otXz.y * 0.9455 );
-          vec2 cellId = floor( rotXz / vec2( 96.0, 68.0 ) );
-          vec2 cellUv = fract( rotXz / vec2( 96.0, 68.0 ) );
-          float cellTone = ot_hash( cellId + vec2( 7.3, 13.1 ) );
-          float cellWarm = ot_hash( cellId * 1.37 + vec2( 3.1, 19.7 ) );
+        // 0..18m 与园区草坪 100% 同源无缝；18..78m 平滑淡出周期草坪贴图，转入纯非周期航拍田野/深林地色阶（零平铺重复感！）
+        float outerBlend = smoothstep( 18.0, 78.0, otDOut );
+        if ( outerBlend > 0.001 ) {
+          // 顺应园区外围干道走势 (~21°) 的自然生态农林地块与柔和微地形肌理
+          vec2 rotXz = vec2( otXz.x * 0.9336 - otXz.y * 0.3584, otXz.x * 0.3584 + otXz.y * 0.9336 );
+          vec2 plotScale = vec2( 104.0, 74.0 );
+          vec2 cellId = floor( rotXz / plotScale );
+          vec2 cellUv = fract( rotXz / plotScale );
 
-          // 柔和天然田垄/修剪微纹与林缘树篱暗带
-          float rowWave = sin( rotXz.y * 0.52 + cellTone * 6.2831 ) * 0.045;
-          float hedgeEdgeX = smoothstep( 0.0, 0.055, cellUv.x ) * smoothstep( 0.0, 0.055, 1.0 - cellUv.x );
-          float hedgeEdgeY = smoothstep( 0.0, 0.065, cellUv.y ) * smoothstep( 0.0, 0.065, 1.0 - cellUv.y );
-          float hedgeShadow = mix( 0.72, 1.0, hedgeEdgeX * hedgeEdgeY );
+          float plotSeed = ot_hash( cellId + vec2( 7.3, 13.1 ) );
+          float plotWarm = ot_hash( cellId * 1.41 + vec2( 3.1, 19.7 ) );
 
-          // 大尺度自然生态草甸与林地深浅起伏（深松翠 ↔ 健康翠绿 ↔ 阳光鲜草绿）
-          float macroBio = ot_fbm( otXz * 0.0055 + vec2( 2.4, -1.8 ) );
-          vec3 deepEmeraldMul = vec3( 0.66, 0.80, 0.72 );
-          vec3 lushMidMul = vec3( 0.96, 1.02, 0.94 );
-          vec3 sunlitMeadowMul = vec3( 1.24, 1.16, 0.84 );
+          // 地块边缘柔和林带暗影（参考图田埂与树篱间的浓郁深绿过渡）
+          float hedgeX = smoothstep( 0.0, 0.07, cellUv.x ) * smoothstep( 0.0, 0.07, 1.0 - cellUv.x );
+          float hedgeY = smoothstep( 0.0, 0.08, cellUv.y ) * smoothstep( 0.0, 0.08, 1.0 - cellUv.y );
+          float hedgeBand = hedgeX * hedgeY;
 
-          float parcelMix = clamp( cellTone * 0.62 + macroBio * 0.52 - 0.08 + rowWave, 0.0, 1.0 );
-          vec3 bioTint = mix( deepEmeraldMul, lushMidMul, smoothstep( 0.12, 0.58, parcelMix ) );
-          bioTint = mix( bioTint, sunlitMeadowMul, smoothstep( 0.58, 0.94, parcelMix ) * ( 0.65 + 0.35 * cellWarm ) );
-          bioTint *= mix( 0.88, 1.0, hedgeShadow );
+          // 非周期多尺度自然植被与林下地表起伏
+          float macroBio = ot_fbm( otXz * 0.0052 + vec2( 2.4, -1.8 ) );
+          float midBio = ot_fbm( otXz * 0.019 + vec2( -5.1, 3.7 ) );
+          float microStipple = ( ot_vnoise( otXz * 0.14 ) - 0.5 ) * 0.10;
+          // 极细腻随机方向农田微耕作肌理（仅部分向阳田块可见，绝非全局斑马纹）
+          float fineRow = sin( ( plotWarm > 0.5 ? rotXz.y : rotXz.x ) * 0.42 + plotSeed * 6.2831 ) * 0.025 * smoothstep( 0.48, 0.85, plotSeed );
 
-          // 丘陵起伏高度着色：坡脚深绿，向阳坡顶更显健康叶绿素生机
-          float hillH = smoothstep( 0.4, 10.5, vOuterWorldPos.y );
-          bioTint *= mix( vec3( 0.94, 0.97, 0.95 ), vec3( 1.09, 1.07, 0.92 ), hillH );
+          float toneT = clamp( plotSeed * 0.52 + macroBio * 0.46 + ( midBio - 0.5 ) * 0.24 + microStipple + fineRow, 0.0, 1.0 );
+          vec3 countryCol = mix( uColWoodFloor, uColMidMeadow, smoothstep( 0.10, 0.56, toneT ) );
+          countryCol = mix( countryCol, uColSunField, smoothstep( 0.56, 0.95, toneT ) * ( 0.60 + 0.40 * plotWarm ) );
+          // 林缘树篱与林下加深浓郁暗绿
+          countryCol = mix( uColDeepShade, countryCol, mix( 0.62, 1.0, hedgeBand ) );
 
-          // 柔和飘动的高空流云地面投影斑驳（仅在白昼外围生效，增强真实航拍纵深感）
-          float cloudShadowFbm = ot_fbm( otXz * 0.0042 - vec2( uTime * 0.0075, -uTime * 0.0042 ) );
-          float cloudDapple = mix( 1.0, mix( 0.82, 1.03, smoothstep( 0.34, 0.68, cloudShadowFbm ) ), smoothstep( 45.0, 145.0, otDOut ) * uDayWeight );
+          // 丘陵坡度与坡顶自然叶绿素亮暗层次
+          float hillT = smoothstep( 0.5, 11.5, vOuterWorldPos.y );
+          countryCol *= mix( vec3( 0.94, 0.97, 0.95 ), vec3( 1.12, 1.08, 0.90 ), hillT );
 
-          diffuseColor.rgb *= mix( vec3( 1.0 ), bioTint * cloudDapple, patchMask );
+          // 柔和飘动的高空流云地面微投影（与 35° 风缕流云同向同步）
+          vec2 windXz = vec2( otXz.x * 0.8192 + otXz.y * 0.5736, -otXz.x * 0.5736 + otXz.y * 0.8192 );
+          float cloudShadow = ot_fbm( windXz * vec2( 0.0028, 0.0058 ) - vec2( uTime * 0.0065, 0.0 ) );
+          float dapple = mix( 1.0, mix( 0.80, 1.04, smoothstep( 0.34, 0.68, cloudShadow ) ), smoothstep( 40.0, 140.0, otDOut ) * uDayWeight );
+          countryCol *= dapple;
+
+          diffuseColor.rgb = mix( diffuseColor.rgb, countryCol, outerBlend );
         }
         `
       )
@@ -429,10 +441,10 @@ function buildBoundlessOuterTerrain(sharedUniforms) {
         `#include <fog_fragment>
         #ifdef USE_FOG
           float mistDOut = ot_distOutsideCampus( vOuterWorldPos.xz );
-          float mistWarp = ( ot_fbm( vOuterWorldPos.xz * 0.0046 - vec2( uTime * 0.006, -uTime * 0.0035 ) ) - 0.5 ) * 105.0;
-          float outerMist = smoothstep( 225.0, 520.0, mistDOut + mistWarp );
-          // 远端 620m 外强制完全融入天际雾色，确保任何缩放/俯仰角度绝不露出网格边界
-          outerMist = max( outerMist, smoothstep( 560.0, 740.0, mistDOut ) );
+          vec2 mistWindXz = vec2( vOuterWorldPos.x * 0.8192 + vOuterWorldPos.z * 0.5736, -vOuterWorldPos.x * 0.5736 + vOuterWorldPos.z * 0.8192 );
+          float mistWarp = ( ot_fbm( mistWindXz * vec2( 0.0032, 0.0062 ) - vec2( uTime * 0.0055, 0.0 ) ) - 0.5 ) * 92.0;
+          float outerMist = smoothstep( 185.0, 435.0, mistDOut + mistWarp );
+          outerMist = max( outerMist, smoothstep( 495.0, 675.0, mistDOut ) );
           gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, clamp( outerMist, 0.0, 1.0 ) );
         #endif
         `
@@ -454,11 +466,11 @@ function buildBoundlessOuterTerrain(sharedUniforms) {
  */
 function buildSubterraneanSealCap() {
   const capShape = createRoundedRectShape(PLINTH_CONFIG.width + 12, PLINTH_CONFIG.depth + 12, PLINTH_CONFIG.cornerRadius + 4);
-  const capGeo = new THREE.ShapeGeometry(capShape, 18);
+  const capGeo = new THREE.ShapeGeometry(capShape, 24);
   capGeo.rotateX(-Math.PI / 2);
   const capMat = new THREE.MeshStandardMaterial({
     name: 'SubterraneanSoilCap',
-    color: '#16241b',
+    color: '#142219',
     roughness: 0.96,
     metalness: 0.0,
   });
@@ -470,7 +482,7 @@ function buildSubterraneanSealCap() {
 }
 
 /**
- * 共用 GLSL 体积云噪声与圆角园区避让函数块
+ * 共用 GLSL 风缕羽化体积云函数块（35° 航拍风向拉伸 + 5 阶域翘曲 FBM + 细腻云边羽化侵蚀）
  */
 const CLOUD_GLSL_COMMON = `
   float cl_hash( vec2 p ) {
@@ -502,15 +514,22 @@ const CLOUD_GLSL_COMMON = `
     return v;
   }
 
-  // 积云团絮状高度场（结合平滑泡状轮廓与多层 FBM 细节，自然蓬松无几何硬边）
-  float cl_billow( vec2 p ) {
+  // 旋转至 ~35° 航拍主风向（由左下拂向右上，呼应参考图斜向飘逸流云动势）
+  vec2 cl_toWindSpace( vec2 xz ) {
+    return vec2( xz.x * 0.8192 - xz.y * 0.5736, xz.x * 0.5736 + xz.y * 0.8192 );
+  }
+
+  // 飘逸风缕体积云密度场：沿风向柔和拉伸 + 细腻多尺度羽化侵蚀，彻底告别圆团状棉球感
+  float cl_windCloud( vec2 windP ) {
+    vec2 stretched = vec2( windP.x * 0.56, windP.y * 1.32 );
     vec2 warp = vec2(
-      cl_fbm( p * 0.65 + vec2( 3.1, 1.7 ) ),
-      cl_fbm( p * 0.65 + vec2( -2.4, 5.3 ) )
+      cl_fbm( stretched * 0.72 + vec2( 3.1, 1.7 ) ),
+      cl_fbm( stretched * 0.72 + vec2( -2.4, 5.3 ) )
     );
-    float base = cl_fbm( p + ( warp - 0.5 ) * 1.15 );
-    float puffs = 1.0 - abs( cl_vnoise( p * 2.25 + warp * 0.6 ) * 2.0 - 1.0 );
-    return clamp( base * 0.78 + puffs * 0.24, 0.0, 1.0 );
+    float body = cl_fbm( stretched + ( warp - 0.5 ) * 1.35 );
+    float wispErode = cl_fbm( stretched * 2.45 + warp * 0.85 );
+    float ribbon = body * 0.76 + wispErode * 0.28 - 0.04;
+    return clamp( ribbon, 0.0, 1.0 );
   }
 
   float cl_distOutsideCampus( vec2 xz ) {
@@ -520,13 +539,15 @@ const CLOUD_GLSL_COMMON = `
 `;
 
 /**
- * 3. 构建无缝环绕式程序化 FBM 体积云海层（底层漫雾云海 / 中层翻涌积云带 / 高空轻盈薄云丝）
+ * 3. 构建地形自适应无缝风缕体积云海层（3000×3000 大幅面 + 严格高于全部外围丘陵 + 双重外缘归零防方形黑边）
  */
 function buildCloudVeilSheet({
   name,
-  altitude,
+  minAltitude,
+  terrainClearance,
   scaleXZ,
-  driftVec,
+  windSpeed,
+  crossDrift,
   innerClear,
   innerFull,
   outerFadeStart,
@@ -538,16 +559,17 @@ function buildCloudVeilSheet({
   renderOrder,
   cloudUniforms,
 }) {
-  // 温和下垂的超大穹顶网格（边缘微降 6m 贴合远景地平线，中心齐平）
-  const geo = new THREE.PlaneGeometry(2100, 2100, 48, 48);
+  // 3000×3000 超大幅面（半宽 1500m >> outerFadeEnd <= 820m & radialGuard 1260m），杜绝一切缩放视角方形云角！
+  const geo = new THREE.PlaneGeometry(3000, 3000, 76, 76);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
     const z = pos.getZ(i);
-    const r = Math.hypot(x, z);
-    const domeDrop = smoothstep(320, 1050, r) * 8.0;
-    pos.setY(i, altitude - domeDrop);
+    const groundH = sampleOuterTerrainHeight(x, z);
+    // 严格高于全部外围山丘至少 terrainClearance 米（永不下沉穿山切出绿洞！）
+    const y = Math.max(minAltitude, groundH + terrainClearance);
+    pos.setY(i, y);
   }
   geo.computeVertexNormals();
 
@@ -560,7 +582,7 @@ function buildCloudVeilSheet({
     fog: true,
   });
 
-  mat.customProgramCacheKey = () => `ioply-volumetric-cloud-veil-${name}-v1`;
+  mat.customProgramCacheKey = () => `ioply-volumetric-cloud-veil-${name}-v2`;
 
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = cloudUniforms.uTime;
@@ -569,14 +591,14 @@ function buildCloudVeilSheet({
     shader.uniforms.uCloudShadow = cloudUniforms.uCloudShadow;
     shader.uniforms.uCloudRim = cloudUniforms.uCloudRim;
     shader.uniforms.uOpacityMul = cloudUniforms.uOpacityMul;
-    shader.uniforms.uSunDirXZ = cloudUniforms.uSunDirXZ;
+    shader.uniforms.uSunDirWind = cloudUniforms.uSunDirWind;
     shader.uniforms.uLayerParams = {
       value: new THREE.Vector4(scaleXZ, densityBias, densityPow, opacityScale),
     };
     shader.uniforms.uMaskRange = {
       value: new THREE.Vector4(innerClear, innerFull, outerFadeStart, outerFadeEnd),
     };
-    shader.uniforms.uDrift = { value: new THREE.Vector3(driftVec[0], driftVec[1], heightLitBoost) };
+    shader.uniforms.uDrift = { value: new THREE.Vector3(windSpeed, crossDrift, heightLitBoost) };
 
     shader.vertexShader = shader.vertexShader
       .replace(
@@ -602,7 +624,7 @@ function buildCloudVeilSheet({
         uniform vec3 uCloudShadow;
         uniform vec3 uCloudRim;
         uniform float uOpacityMul;
-        uniform vec2 uSunDirXZ;
+        uniform vec2 uSunDirWind;
         uniform vec4 uLayerParams;
         uniform vec4 uMaskRange;
         uniform vec3 uDrift;
@@ -614,35 +636,40 @@ function buildCloudVeilSheet({
         '#include <color_fragment>',
         `#include <color_fragment>
         vec2 cXz = vCloudWorldPos.xz;
+        float cRad = length( cXz );
+        // 严格圆形远界归零守卫（在 3000×3000 半宽 1500m 之前彻底消失，星夜/昼间拉远零方形硬边！）
+        float radialGuard = 1.0 - smoothstep( 820.0, 1260.0, cRad );
+        if ( radialGuard < 0.002 ) discard;
+
         float cDOut = cl_distOutsideCampus( cXz );
-        vec2 cP = cXz * uLayerParams.x - uDrift.xy * uTime;
+        vec2 windXz = cl_toWindSpace( cXz );
+        vec2 cP = windXz * uLayerParams.x - vec2( uDrift.x * uTime, uDrift.y * uTime );
 
-        // 有机扰动园区清透窗口边界，使外围云雾呈自然海湾状卷曲探入外缘林带，绝无生硬几何圆环
-        float shoreWarp = ( cl_fbm( cXz * 0.0042 - uDrift.xy * uTime * 0.45 + vec2( 4.2, -3.1 ) ) - 0.5 ) * 112.0;
+        // 风向拉长的有机云岸扰动，让飘逸云带柔和轻拂外围林缘与视角四角
+        float shoreWarp = ( cl_fbm( vec2( windXz.x * 0.0024, windXz.y * 0.0054 ) - vec2( uDrift.x * uTime * 0.35, 0.0 ) + vec2( 4.2, -3.1 ) ) - 0.5 ) * 124.0;
         float innerWindow = smoothstep( uMaskRange.x, uMaskRange.y, cDOut + shoreWarp );
-        // 严格保护中心建筑与湖泊区（cDOut < -14m 彻底透明零遮挡）
-        innerWindow *= smoothstep( -14.0, 26.0, cDOut );
+        // 严格保护核心园区（cDOut < -8m 100% 透明通透）
+        innerWindow *= smoothstep( -8.0, 32.0, cDOut );
 
-        // 最外缘柔化归零（远在平面几何边缘 1050m 之前彻底消失）
-        float outerFade = 1.0 - smoothstep( uMaskRange.z, uMaskRange.w, cDOut );
+        float outerFade = ( 1.0 - smoothstep( uMaskRange.z, uMaskRange.w, cDOut ) ) * radialGuard;
 
-        float rawDens = cl_billow( cP );
-        // 向远处云海自然增厚形成无界云床
-        float farThick = smoothstep( 175.0, 440.0, cDOut ) * 0.28;
-        float dens = clamp( ( rawDens + uLayerParams.y + farThick ) * innerWindow, 0.0, 1.0 );
-        dens = pow( smoothstep( 0.14, 0.88, dens ), uLayerParams.z );
+        float rawDens = cl_windCloud( cP );
+        // 向外围逐渐汇聚成柔润无界云海，边缘呈轻盈羽毛状消散
+        float farThick = smoothstep( 155.0, 395.0, cDOut ) * 0.30;
+        float featherErode = ( cl_fbm( cP * 2.9 + vec2( 9.4, -4.1 ) ) - 0.45 ) * 0.16;
+        float dens = clamp( ( rawDens + uLayerParams.y + farThick + featherErode ) * innerWindow, 0.0, 1.0 );
+        dens = pow( smoothstep( 0.12, 0.88, dens ), uLayerParams.z );
 
-        // 单步方向导数体积自阴影：沿阳光方向采样，塑造饱满蓬松的向阳白顶与微凉雾青暗底
-        float sunSample = cl_billow( cP + uSunDirXZ * 0.16 );
-        float directionalLit = clamp( 0.52 + ( rawDens - sunSample ) * 2.75 + uDrift.z, 0.0, 1.0 );
-        // 越往云层边缘薄雾处透光越亮（自然散射银边）
-        float silverRim = smoothstep( 0.05, 0.34, dens ) * ( 1.0 - smoothstep( 0.34, 0.78, dens ) );
+        // 沿阳光方向单步体积自阴影，刻画柔亮向阳云脊与清润暗底
+        float sunSample = cl_windCloud( cP + uSunDirWind * 0.17 );
+        float directionalLit = clamp( 0.52 + ( rawDens - sunSample ) * 2.55 + uDrift.z, 0.0, 1.0 );
+        float silverRim = smoothstep( 0.04, 0.34, dens ) * ( 1.0 - smoothstep( 0.34, 0.78, dens ) );
 
-        vec3 cloudCol = mix( uCloudShadow, uCloudMid, smoothstep( 0.15, 0.62, directionalLit ) );
-        cloudCol = mix( cloudCol, uCloudLit, smoothstep( 0.48, 0.95, directionalLit ) );
-        cloudCol = mix( cloudCol, uCloudRim, silverRim * 0.35 );
+        vec3 cloudCol = mix( uCloudShadow, uCloudMid, smoothstep( 0.14, 0.62, directionalLit ) );
+        cloudCol = mix( cloudCol, uCloudLit, smoothstep( 0.46, 0.94, directionalLit ) );
+        cloudCol = mix( cloudCol, uCloudRim, silverRim * 0.36 );
 
-        float finalAlpha = clamp( dens * outerFade * uLayerParams.w * uOpacityMul, 0.0, 0.96 );
+        float finalAlpha = clamp( dens * outerFade * uLayerParams.w * uOpacityMul, 0.0, 0.94 );
         if ( finalAlpha < 0.004 ) discard;
 
         diffuseColor = vec4( cloudCol, finalAlpha );
@@ -659,80 +686,65 @@ function buildCloudVeilSheet({
 }
 
 /**
- * 4. 构建 3D 多片层视差漂浮积云团阵列（单次 Draw Call，围绕园区四角、东侧山麓与外围田野柔和漂浮）
- *    每一朵云由 4 层垂直递增的蓬松软边积云切面组成（下层暗底 -> 中层体积 -> 上层向阳亮顶），
- *    在旋转 360° 与默认等轴测视角下呈现参考图同款立体漂浮航拍积云，绝无生硬球体或方形边界！
+ * 4. 构建细长风缕轻薄云带层（18 条 ~2.6:1 顺风细长羽化薄雾云带，双片层轻柔融于连续云海，彻底消除棉球/薄饼斑点）
  */
-function buildSculptedCumulusBanks(cloudUniforms) {
-  // 精心排布在园区外缘与远景（全部避开核心建筑与中心湖泊，自然点缀默认视角的右上、左上、右下与四周边界）
-  const banks = [
-    // 右上 / 东侧龙蟠山外缘丘陵带（呼应参考图右上飘浮积云）
-    { x: 325, y: 26, z: 38, sx: 145, sz: 112, h: 12, rot: 0.28, seed: 1.1 },
-    { x: 420, y: 33, z: 118, sx: 175, sz: 135, h: 14, rot: -0.22, seed: 2.3 },
-    { x: 315, y: 27, z: -115, sx: 155, sz: 118, h: 13, rot: 0.45, seed: 3.7 },
-    { x: 460, y: 36, z: -42, sx: 195, sz: 148, h: 15, rot: 0.14, seed: 4.9 },
-    // 右下 / 东南外围草甸（呼应参考图右下角轻盈前景飘云！）
-    { x: 188, y: 20, z: 268, sx: 132, sz: 98, h: 10, rot: -0.35, seed: 6.2 },
-    { x: 295, y: 26, z: 224, sx: 158, sz: 122, h: 12, rot: 0.18, seed: 7.4 },
-    { x: 96, y: 21, z: 308, sx: 136, sz: 102, h: 10, rot: 0.52, seed: 8.6 },
-    // 左上 / 西北外围田野与中关村大道北延入云处
-    { x: -292, y: 28, z: -348, sx: 168, sz: 128, h: 14, rot: 0.34, seed: 9.8 },
-    { x: -175, y: 27, z: -372, sx: 162, sz: 120, h: 13, rot: -0.26, seed: 11.2 },
-    { x: -385, y: 31, z: -215, sx: 174, sz: 132, h: 14, rot: 0.62, seed: 12.5 },
-    { x: -45, y: 26, z: -318, sx: 146, sz: 108, h: 12, rot: -0.15, seed: 13.9 },
-    // 东北 / 平陵西路东延入云处
-    { x: 132, y: 28, z: -302, sx: 158, sz: 120, h: 13, rot: 0.41, seed: 15.1 },
-    { x: 258, y: 31, z: -268, sx: 170, sz: 126, h: 14, rot: -0.32, seed: 16.4 },
-    { x: 398, y: 35, z: -225, sx: 188, sz: 142, h: 15, rot: 0.24, seed: 17.8 },
+function buildSculptedMistRibbons(cloudUniforms) {
+  // 全部顺应 ~35° 主风向 (-0.61 rad ± 微幅变化)，长宽比 2.4:1 ~ 2.9:1，大幅面低透明羽化融于连续云海
+  const ribbons = [
+    // 右上 / 东侧龙蟠山外缘丘陵带（呼应参考图右上风缕飘云）
+    { x: 355, y: 31, z: 42, sx: 330, sz: 128, h: 7, rot: -0.58, seed: 1.3 },
+    { x: 465, y: 36, z: 128, sx: 380, sz: 146, h: 8, rot: -0.64, seed: 2.7 },
+    { x: 345, y: 32, z: -125, sx: 340, sz: 132, h: 7, rot: -0.52, seed: 4.1 },
+    { x: 495, y: 38, z: -55, sx: 410, sz: 158, h: 8, rot: -0.60, seed: 5.5 },
+    // 右下 / 东南外围草甸（呼应参考图右下角细长羽化前景流云）
+    { x: 205, y: 27, z: 275, sx: 300, sz: 112, h: 6, rot: -0.56, seed: 7.2 },
+    { x: 335, y: 31, z: 235, sx: 345, sz: 132, h: 7, rot: -0.63, seed: 8.8 },
+    { x: 82, y: 28, z: 325, sx: 315, sz: 118, h: 6, rot: -0.54, seed: 10.4 },
+    // 左上 / 西北外围田野与中关村大道北延
+    { x: -305, y: 32, z: -342, sx: 360, sz: 138, h: 7, rot: -0.62, seed: 12.1 },
+    { x: -165, y: 31, z: -375, sx: 345, sz: 132, h: 7, rot: -0.55, seed: 13.7 },
+    { x: -415, y: 34, z: -205, sx: 375, sz: 142, h: 8, rot: -0.66, seed: 15.2 },
+    // 东北 / 平陵西路东延
+    { x: 145, y: 32, z: -315, sx: 350, sz: 134, h: 7, rot: -0.59, seed: 16.8 },
+    { x: 345, y: 36, z: -285, sx: 390, sz: 148, h: 8, rot: -0.53, seed: 18.4 },
     // 西侧与西南外围林带
-    { x: -362, y: 25, z: -58, sx: 156, sz: 118, h: 12, rot: -0.44, seed: 19.2 },
-    { x: -356, y: 25, z: 98, sx: 152, sz: 115, h: 12, rot: 0.31, seed: 20.6 },
-    { x: -318, y: 26, z: 248, sx: 164, sz: 124, h: 13, rot: -0.19, seed: 22.1 },
-    { x: -165, y: 24, z: 312, sx: 154, sz: 116, h: 12, rot: 0.27, seed: 23.5 },
-    { x: -35, y: 25, z: 332, sx: 158, sz: 118, h: 12, rot: -0.38, seed: 24.9 },
-    // 外环 360° 远景蓬松云带（缩放拉远时形成完整浪漫无界云海框景）
-    { x: 545, y: 34, z: 225, sx: 225, sz: 175, h: 16, rot: 0.22, seed: 26.3 },
-    { x: 565, y: 36, z: -155, sx: 235, sz: 182, h: 16, rot: -0.31, seed: 27.7 },
-    { x: 355, y: 35, z: -395, sx: 220, sz: 170, h: 16, rot: 0.48, seed: 29.1 },
-    { x: 25, y: 34, z: -475, sx: 230, sz: 176, h: 16, rot: -0.14, seed: 30.5 },
-    { x: -345, y: 35, z: -468, sx: 235, sz: 178, h: 16, rot: 0.36, seed: 31.9 },
-    { x: -535, y: 34, z: -265, sx: 228, sz: 175, h: 16, rot: -0.42, seed: 33.4 },
-    { x: -545, y: 33, z: 28, sx: 224, sz: 172, h: 15, rot: 0.19, seed: 34.8 },
-    { x: -495, y: 33, z: 315, sx: 222, sz: 170, h: 15, rot: -0.28, seed: 36.2 },
-    { x: -245, y: 32, z: 455, sx: 226, sz: 172, h: 15, rot: 0.44, seed: 37.6 },
-    { x: 115, y: 32, z: 448, sx: 225, sz: 172, h: 15, rot: -0.21, seed: 39.0 },
-    { x: 385, y: 33, z: 368, sx: 220, sz: 168, h: 15, rot: 0.33, seed: 40.4 },
+    { x: -390, y: 30, z: -42, sx: 345, sz: 130, h: 7, rot: -0.61, seed: 20.1 },
+    { x: -380, y: 30, z: 145, sx: 340, sz: 128, h: 7, rot: -0.57, seed: 21.7 },
+    { x: -245, y: 30, z: 315, sx: 355, sz: 134, h: 7, rot: -0.64, seed: 23.3 },
+    // 远环柔和延伸带（始终在 radialGuard 范围内无缝消融）
+    { x: 560, y: 38, z: 255, sx: 420, sz: 164, h: 8, rot: -0.58, seed: 25.0 },
+    { x: -35, y: 35, z: -475, sx: 410, sz: 158, h: 8, rot: -0.60, seed: 26.6 },
+    { x: -510, y: 35, z: 305, sx: 415, sz: 160, h: 8, rot: -0.55, seed: 28.2 },
   ];
 
-  // 每朵云 4 层垂直视差切片，且按 slice 层序从底到顶写入索引缓冲（航拍俯视天然自下而上正确叠加！）
-  const sliceCount = 4;
-  const quadCount = banks.length * sliceCount;
+  // 仅 2 层极柔和垂直叠层（绝无多阶薄饼分层感），且自动抬升至地形上方 >= 12m
+  const sliceCount = 2;
+  const quadCount = ribbons.length * sliceCount;
   const positions = new Float32Array(quadCount * 4 * 3);
   const uvs = new Float32Array(quadCount * 4 * 2);
-  const puffData = new Float32Array(quadCount * 4 * 4); // (seed, sliceT, densityMul, driftPhase)
+  const puffData = new Float32Array(quadCount * 4 * 4);
   const indices = new Uint16Array(quadCount * 6);
 
-  // 轻微向阳光方向偏置上层云顶，形成真实积云斜向立体堆叠
   const sunShiftX = -0.849;
   const sunShiftZ = 0.529;
 
   let qIdx = 0;
   for (let s = 0; s < sliceCount; s++) {
-    const sliceT = s / (sliceCount - 1); // 0.0 (暗底) -> 1.0 (亮顶)
-    // 中下部略宽、顶部蓬松略收束
-    const widthProfile = 1.0 - Math.pow(sliceT - 0.32, 2) * 0.42;
-    const densityMul = 0.72 + Math.sin(sliceT * Math.PI) * 0.32;
+    const sliceT = s / (sliceCount - 1); // 0.0 -> 1.0
+    const widthProfile = sliceT === 0 ? 1.0 : 0.88;
+    const densityMul = sliceT === 0 ? 0.85 : 0.72;
 
-    for (let b = 0; b < banks.length; b++) {
-      const bank = banks[b];
-      const halfX = bank.sx * 0.5 * widthProfile;
-      const halfZ = bank.sz * 0.5 * widthProfile;
-      const cosR = Math.cos(bank.rot + sliceT * 0.14);
-      const sinR = Math.sin(bank.rot + sliceT * 0.14);
+    for (let b = 0; b < ribbons.length; b++) {
+      const rb = ribbons[b];
+      const baseY = Math.max(rb.y, sampleOuterTerrainHeight(rb.x, rb.z) + 18.0);
+      const halfX = rb.sx * 0.5 * widthProfile;
+      const halfZ = rb.sz * 0.5 * widthProfile;
+      const cosR = Math.cos(rb.rot + sliceT * 0.06);
+      const sinR = Math.sin(rb.rot + sliceT * 0.06);
 
-      const cx = bank.x + sunShiftX * sliceT * bank.h * 0.42;
-      const cy = bank.y + sliceT * bank.h;
-      const cz = bank.z + sunShiftZ * sliceT * bank.h * 0.42;
+      const cx = rb.x + sunShiftX * sliceT * rb.h * 0.35;
+      const cy = baseY + sliceT * rb.h;
+      const cz = rb.z + sunShiftZ * sliceT * rb.h * 0.35;
 
       const corners = [
         [-halfX, -halfZ, 0, 0],
@@ -756,10 +768,10 @@ function buildSculptedCumulusBanks(cloudUniforms) {
         uvs[vi * 2] = corners[c][2];
         uvs[vi * 2 + 1] = corners[c][3];
 
-        puffData[vi * 4] = bank.seed;
+        puffData[vi * 4] = rb.seed;
         puffData[vi * 4 + 1] = sliceT;
         puffData[vi * 4 + 2] = densityMul;
-        puffData[vi * 4 + 3] = (b % 7) * 0.18;
+        puffData[vi * 4 + 3] = (b % 7) * 0.16;
       }
 
       const iBase = qIdx * 6;
@@ -782,7 +794,7 @@ function buildSculptedCumulusBanks(cloudUniforms) {
   geo.computeVertexNormals();
 
   const mat = new THREE.MeshBasicMaterial({
-    name: 'VolumetricCumulusBanks',
+    name: 'VolumetricMistRibbons',
     color: '#ffffff',
     transparent: true,
     depthWrite: false,
@@ -790,7 +802,7 @@ function buildSculptedCumulusBanks(cloudUniforms) {
     fog: true,
   });
 
-  mat.customProgramCacheKey = () => 'ioply-volumetric-cumulus-banks-v1';
+  mat.customProgramCacheKey = () => 'ioply-volumetric-mist-ribbons-v2';
 
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = cloudUniforms.uTime;
@@ -799,7 +811,7 @@ function buildSculptedCumulusBanks(cloudUniforms) {
     shader.uniforms.uCloudShadow = cloudUniforms.uCloudShadow;
     shader.uniforms.uCloudRim = cloudUniforms.uCloudRim;
     shader.uniforms.uBankOpacity = cloudUniforms.uBankOpacity;
-    shader.uniforms.uSunDirXZ = cloudUniforms.uSunDirXZ;
+    shader.uniforms.uSunDirWind = cloudUniforms.uSunDirWind;
 
     shader.vertexShader = shader.vertexShader
       .replace(
@@ -816,10 +828,9 @@ function buildSculptedCumulusBanks(cloudUniforms) {
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
-        // 极其轻柔的周期环流微飘（永不飘离外围云带，保持画面始终构图完美）
-        float driftPhase = aPuffData.x * 0.73 + aPuffData.w * 6.2831;
-        transformed.x += sin( uTime * 0.055 + driftPhase ) * 11.5;
-        transformed.z += cos( uTime * 0.042 + driftPhase * 1.3 ) * 8.5;
+        float driftPhase = aPuffData.x * 0.67 + aPuffData.w * 6.2831;
+        transformed.x += sin( uTime * 0.048 + driftPhase ) * 14.0;
+        transformed.z += cos( uTime * 0.036 + driftPhase * 1.2 ) * 9.0;
         vPuffUv = aPuffUv;
         vPuffData = aPuffData;
         vPuffWorldPos = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;
@@ -836,7 +847,7 @@ function buildSculptedCumulusBanks(cloudUniforms) {
         uniform vec3 uCloudShadow;
         uniform vec3 uCloudRim;
         uniform float uBankOpacity;
-        uniform vec2 uSunDirXZ;
+        uniform vec2 uSunDirWind;
         varying vec2 vPuffUv;
         varying vec4 vPuffData;
         varying vec3 vPuffWorldPos;
@@ -854,38 +865,37 @@ function buildSculptedCumulusBanks(cloudUniforms) {
         float sliceT = vPuffData.y;
         float sliceDens = vPuffData.z;
 
-        // 有机多瓣积云轮廓：中心圆润饱满，外缘经 FBM 羽化出蓬松卷云丝，绝对零方形切边
-        vec2 nPos = centered * 2.15 + vec2( seed * 1.73, seed * 2.41 ) - vec2( uTime * 0.012, -uTime * 0.007 );
-        float shapeNoise = cl_billow( nPos );
-        float radialEnv = 1.0 - smoothstep( 0.16, 0.96, rad + ( 0.5 - shapeNoise ) * 0.42 );
-        // 四角硬保护，确保 quad 边缘 100% 为 0
-        float safeEdge = 1.0 - smoothstep( 0.78, 0.98, rad );
+        // 顺风细长羽化薄云丝：边缘以极高频率自然侵蚀，无缝融进连续云海（零圆斑/零堆叠硬边）
+        vec2 nPos = vec2( centered.x * 1.35, centered.y * 2.85 ) + vec2( seed * 1.73, seed * 2.41 ) - vec2( uTime * 0.011, 0.0 );
+        float shapeNoise = cl_windCloud( nPos );
+        float wispDetail = cl_fbm( nPos * 2.6 + vec2( 2.1, -3.7 ) );
+        float featherEnv = 1.0 - smoothstep( 0.06, 0.96, rad + ( 0.52 - shapeNoise ) * 0.58 + ( 0.5 - wispDetail ) * 0.22 );
+        float safeEdge = 1.0 - smoothstep( 0.72, 0.98, rad );
 
-        // 严防积云漂入核心园区建筑与湖泊上空
-        float campusGuard = smoothstep( 8.0, 68.0, cl_distOutsideCampus( vPuffWorldPos.xz ) );
+        float campusGuard = smoothstep( 14.0, 82.0, cl_distOutsideCampus( vPuffWorldPos.xz ) );
+        float radialGuard = 1.0 - smoothstep( 780.0, 1180.0, length( vPuffWorldPos.xz ) );
 
-        float dens = clamp( radialEnv * safeEdge * ( 0.55 + shapeNoise * 0.65 ) * sliceDens * campusGuard, 0.0, 1.0 );
-        dens = smoothstep( 0.08, 0.84, dens );
-        if ( dens < 0.005 ) discard;
+        float dens = clamp( featherEnv * safeEdge * ( 0.45 + shapeNoise * 0.75 ) * sliceDens * campusGuard * radialGuard, 0.0, 1.0 );
+        dens = pow( smoothstep( 0.08, 0.86, dens ), 1.45 );
+        if ( dens < 0.004 ) discard;
 
-        // 3D 垂直分层光影 + 水平斜射日光自阴影（底层微凉雾青、顶层蓬松暖白、边缘透光银边）
-        float sunNoise = cl_billow( nPos + uSunDirXZ * 0.22 );
-        float horizLit = clamp( 0.50 + ( shapeNoise - sunNoise ) * 2.4 - dot( centered, -uSunDirXZ ) * 0.28, 0.0, 1.0 );
-        float totalLit = clamp( sliceT * 0.62 + horizLit * 0.48, 0.0, 1.0 );
-        float rimGlow = smoothstep( 0.06, 0.32, dens ) * ( 1.0 - smoothstep( 0.35, 0.78, dens ) );
+        float sunNoise = cl_windCloud( nPos + uSunDirWind * 0.20 );
+        float horizLit = clamp( 0.52 + ( shapeNoise - sunNoise ) * 2.2, 0.0, 1.0 );
+        float totalLit = clamp( sliceT * 0.42 + horizLit * 0.62, 0.0, 1.0 );
+        float rimGlow = smoothstep( 0.05, 0.32, dens ) * ( 1.0 - smoothstep( 0.34, 0.76, dens ) );
 
-        vec3 col = mix( uCloudShadow, uCloudMid, smoothstep( 0.10, 0.58, totalLit ) );
-        col = mix( col, uCloudLit, smoothstep( 0.45, 0.96, totalLit ) );
-        col = mix( col, uCloudRim, rimGlow * 0.38 );
+        vec3 col = mix( uCloudShadow, uCloudMid, smoothstep( 0.12, 0.60, totalLit ) );
+        col = mix( col, uCloudLit, smoothstep( 0.46, 0.95, totalLit ) );
+        col = mix( col, uCloudRim, rimGlow * 0.34 );
 
-        float alpha = clamp( dens * uBankOpacity * ( 0.42 + sliceT * 0.22 ), 0.0, 0.85 );
+        float alpha = clamp( dens * uBankOpacity * ( 0.46 + sliceT * 0.16 ), 0.0, 0.72 );
         diffuseColor = vec4( col, alpha );
         `
       );
   };
 
   const mesh = new THREE.Mesh(geo, mat);
-  mesh.name = 'VolumetricCumulusBanks';
+  mesh.name = 'VolumetricMistRibbons';
   mesh.userData.noMerge = true;
   mesh.frustumCulled = false;
   mesh.renderOrder = 12;
@@ -893,8 +903,7 @@ function buildSculptedCumulusBanks(cloudUniforms) {
 }
 
 /**
- * 保持原有导出名称与返回契约 { group, update(elapsed, duskFactor, nightFactor) }，
- * 无缝替换旧硬件托盘为无界自然翡翠外围地貌 + 动态多层体积航拍云海系统
+ * 保持原有导出名称与返回契约 { group, update(elapsed, duskFactor, nightFactor) }
  */
 export function buildHardwarePlinth() {
   const group = new THREE.Group();
@@ -905,33 +914,40 @@ export function buildHardwarePlinth() {
     uDayWeight: { value: 1 },
   };
 
-  // 白昼 / 暮光 / 星夜三态云层物理色板（针对 ACESFilmic 0.6 预压缩校准白昼高光，确保阳光云顶蓬松透亮洁白）
+  // 昼/暮/夜三态云层色板（QA #44 深度校准：白昼清透暖白、暮光克制微暖、星夜静谧深靛零斑点）
   const palettes = {
     day: {
-      lit: new THREE.Color('#fffef9').multiplyScalar(2.15),
-      mid: new THREE.Color('#e8f1ed').multiplyScalar(1.28),
-      shadow: new THREE.Color('#a4bbb3').multiplyScalar(0.95),
-      rim: new THREE.Color('#ffffff').multiplyScalar(2.45),
-      veilOpacity: 0.90,
-      bankOpacity: 0.80,
+      lit: new THREE.Color('#fffef9').multiplyScalar(2.10),
+      mid: new THREE.Color('#e6efea').multiplyScalar(1.24),
+      shadow: new THREE.Color('#a2b6ae').multiplyScalar(0.92),
+      rim: new THREE.Color('#ffffff').multiplyScalar(2.35),
+      veilOpacity: 0.86,
+      bankOpacity: 0.38,
     },
     dusk: {
-      lit: new THREE.Color('#f4a66e').multiplyScalar(1.45),
-      mid: new THREE.Color('#5a708c'),
-      shadow: new THREE.Color('#1d2b3e'),
-      rim: new THREE.Color('#ffc088').multiplyScalar(1.65),
-      veilOpacity: 0.82,
-      bankOpacity: 0.62,
+      lit: new THREE.Color('#c98c68').multiplyScalar(1.12),
+      mid: new THREE.Color('#3d5069'),
+      shadow: new THREE.Color('#1a2638'),
+      rim: new THREE.Color('#dfa47c').multiplyScalar(1.18),
+      veilOpacity: 0.72,
+      bankOpacity: 0.24,
     },
     night: {
-      lit: new THREE.Color('#2d476f'),
-      mid: new THREE.Color('#14243c'),
-      shadow: new THREE.Color('#07101e'),
-      rim: new THREE.Color('#426494'),
-      veilOpacity: 0.64,
-      bankOpacity: 0.40,
+      lit: new THREE.Color('#172740'),
+      mid: new THREE.Color('#0d182b'),
+      shadow: new THREE.Color('#070f1d'),
+      rim: new THREE.Color('#233b5e'),
+      veilOpacity: 0.45,
+      bankOpacity: 0.14,
     },
   };
+
+  // 将主太阳水平方向 (-265, 165) 旋转至与 cl_toWindSpace 一致的风向坐标系
+  const sunRaw = new THREE.Vector2(-265, 165).normalize();
+  const sunDirWind = new THREE.Vector2(
+    sunRaw.x * 0.8192 - sunRaw.y * 0.5736,
+    sunRaw.x * 0.5736 + sunRaw.y * 0.8192
+  ).normalize();
 
   const cloudUniforms = {
     uTime: sharedUniforms.uTime,
@@ -941,71 +957,76 @@ export function buildHardwarePlinth() {
     uCloudRim: { value: palettes.day.rim.clone() },
     uOpacityMul: { value: palettes.day.veilOpacity },
     uBankOpacity: { value: palettes.day.bankOpacity },
-    // 严格对齐 StudioScene 主阳光方向 (-265, 205, 165) 的水平归一化向量
-    uSunDirXZ: { value: new THREE.Vector2(-265, 165).normalize() },
+    uSunDirWind: { value: sunDirWind },
   };
 
-  // 1. 地下防漏光封底 + 无缝外围翡翠绿野地形
+  // 1. 地下防漏光封底 + 无缝外围翡翠自然田野地形
   group.add(buildSubterraneanSealCap());
   group.add(buildBoundlessOuterTerrain(sharedUniforms));
 
-  // 2. 底层柔润云雾地平线帷幕（y = 7m）：环抱园区外缘林带并向远景无缝溶成云海
+  // 2. 底层风缕云海主帷幕（y >= max(24.0, terrain+13.5)，严防任何丘陵或林冠切穿，3000×3000 + 双重外缘归零）
   group.add(
     buildCloudVeilSheet({
       name: 'PerimeterCloudSeaLower',
-      altitude: 7.5,
-      scaleXZ: 0.0044,
-      driftVec: [0.0068, -0.0038],
-      innerClear: 58.0,
-      innerFull: 245.0,
-      outerFadeStart: 690.0,
-      outerFadeEnd: 980.0,
-      densityBias: -0.06,
-      densityPow: 1.05,
-      heightLitBoost: -0.04,
-      opacityScale: 0.86,
+      minAltitude: 24.0,
+      terrainClearance: 13.5,
+      scaleXZ: 0.0046,
+      windSpeed: 0.0072,
+      crossDrift: -0.0014,
+      innerClear: 44.0,
+      innerFull: 228.0,
+      outerFadeStart: 560.0,
+      outerFadeEnd: 820.0,
+      densityBias: -0.03,
+      densityPow: 1.08,
+      heightLitBoost: -0.03,
+      opacityScale: 0.84,
       renderOrder: 10,
       cloudUniforms,
     })
   );
 
-  // 3. 中层蓬松体积积云环幕（y = 17m）：增添多层视差与丰盈向阳亮白云顶层次
+  // 3. 中层飘逸体积云海带（y >= max(36.0, terrain+21.0)，丰富体积视差与向阳亮白流云脊）
   group.add(
     buildCloudVeilSheet({
       name: 'PerimeterCloudSeaUpper',
-      altitude: 17.5,
-      scaleXZ: 0.0056,
-      driftVec: [0.0102, -0.0055],
-      innerClear: 82.0,
-      innerFull: 295.0,
-      outerFadeStart: 670.0,
-      outerFadeEnd: 950.0,
-      densityBias: -0.14,
+      minAltitude: 36.0,
+      terrainClearance: 21.0,
+      scaleXZ: 0.0058,
+      windSpeed: 0.0108,
+      crossDrift: -0.0020,
+      innerClear: 68.0,
+      innerFull: 270.0,
+      outerFadeStart: 540.0,
+      outerFadeEnd: 800.0,
+      densityBias: -0.10,
       densityPow: 1.18,
       heightLitBoost: 0.14,
-      opacityScale: 0.74,
+      opacityScale: 0.72,
       renderOrder: 11,
       cloudUniforms,
     })
   );
 
-  // 4. 3D 多片层视差漂浮积云团阵列（y = 20..48m，单次 Draw Call，精准点缀四角与外缘山野）
-  group.add(buildSculptedCumulusBanks(cloudUniforms));
+  // 4. 细长风缕轻薄云带层（单次 Draw Call，柔和融汇于连续云海之中，零棉球零分层硬边）
+  group.add(buildSculptedMistRibbons(cloudUniforms));
 
-  // 5. 高空轻盈透亮薄云丝（y = 52m）：航拍高级感轻纱云缕，不遮挡核心园区
+  // 5. 高空轻纱薄云丝缕（y >= max(56.0, terrain+30.0)，精致航拍透亮薄雾云缕）
   group.add(
     buildCloudVeilSheet({
       name: 'HighAltitudeCirrusWisps',
-      altitude: 52.0,
-      scaleXZ: 0.0068,
-      driftVec: [0.0145, -0.0072],
-      innerClear: 46.0,
-      innerFull: 230.0,
-      outerFadeStart: 620.0,
-      outerFadeEnd: 910.0,
-      densityBias: -0.26,
-      densityPow: 1.45,
-      heightLitBoost: 0.24,
+      minAltitude: 56.0,
+      terrainClearance: 30.0,
+      scaleXZ: 0.0072,
+      windSpeed: 0.0155,
+      crossDrift: -0.0028,
+      innerClear: 34.0,
+      innerFull: 205.0,
+      outerFadeStart: 510.0,
+      outerFadeEnd: 770.0,
+      densityBias: -0.22,
+      densityPow: 1.42,
+      heightLitBoost: 0.22,
       opacityScale: 0.42,
       renderOrder: 13,
       cloudUniforms,

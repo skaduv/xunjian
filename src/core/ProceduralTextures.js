@@ -49,7 +49,7 @@ function smoothNoise2d(x, y, period) {
 }
 
 /**
- * 1. 生机盎然的健康叶绿素翡翠草坪（严格整数周期无缝 45° 修剪韵律 + 多尺度自然草甸色阶，零拼缝零发灰）
+ * 1. 生机盎然的健康叶绿素航拍翡翠草坪（深邃自然 #36662d + 极克制微柔修剪质感 + 细腻有机草绒肌理，零斑马纹零拼缝）
  */
 export function createMowedLawnTexture(maxAnisotropy = 8) {
   const size = 256;
@@ -57,9 +57,9 @@ export function createMowedLawnTexture(maxAnisotropy = 8) {
 
   const img = ctx.createImageData(size, size);
   const d = img.data;
-  const baseR = 64; // #407735 健康浓郁叶绿素翡翠绿基调
-  const baseG = 119;
-  const baseB = 53;
+  const baseR = 54; // #36662d 浓郁自然航拍叶绿素翡翠绿（对齐参考图健康深绿草甸）
+  const baseG = 102;
+  const baseB = 45;
   const stripeCycles = 4; // 整数周期：沿 X/Y 边界严格闭合，彻底消除 tile 接缝
 
   for (let y = 0; y < size; y++) {
@@ -68,23 +68,24 @@ export function createMowedLawnTexture(maxAnisotropy = 8) {
       const u = x / size;
       const idx = (y * size + x) * 4;
 
-      // 严格无缝 45° 园林修剪条带（阳光叶绿素暖绿 ↔ 深翠阴影带，自然生动不生硬）
+      // 极克制柔和的 45° 园林修剪微光韵律（彻底消除远近景灯芯绒/斑马条纹感）
       const phase = (u + v) * Math.PI * 2 * stripeCycles;
-      const stripeWave = Math.sin(phase) * 0.82 + Math.sin(phase * 3) * 0.14;
-      const stripeR = stripeWave * 6.5;
-      const stripeG = stripeWave * 8.5;
-      const stripeB = stripeWave * 3.8;
+      const stripeWave = Math.sin(phase) * 0.85 + Math.sin(phase * 3) * 0.12;
+      const stripeR = stripeWave * 1.8;
+      const stripeG = stripeWave * 2.4;
+      const stripeB = stripeWave * 1.0;
 
-      // 全整数周期多尺度自然生态草坪层次 + 细腻有机草叶肌理
-      const macro = (smoothNoise2d(u * 4, v * 4, 4) - 0.5) * 14.0;
-      const mid = (smoothNoise2d(u * 8 + 1.7, v * 8 + 3.1, 8) - 0.5) * 9.0;
+      // 全整数周期多尺度柔和草绒层次 + 细腻有机叶丛颗粒
+      const macro = (smoothNoise2d(u * 4, v * 4, 4) - 0.5) * 10.5;
+      const mid = (smoothNoise2d(u * 8 + 1.7, v * 8 + 3.1, 8) - 0.5) * 8.0;
       const fine = (smoothNoise2d(u * 16 + 4.3, v * 16 + 0.9, 16) - 0.5) * 6.5;
-      const micro = (hash2d(x, y) - 0.5) * 7.5;
-      const sunPatch = (smoothNoise2d(u * 3 + 0.6, v * 3 + 2.1, 3) - 0.5) * 9.5;
+      const tuft = (smoothNoise2d(u * 32 + 2.1, v * 32 + 5.7, 32) - 0.5) * 5.0;
+      const micro = (hash2d(x, y) - 0.5) * 7.2;
+      const sunPatch = (smoothNoise2d(u * 3 + 0.6, v * 3 + 2.1, 3) - 0.5) * 7.5;
 
-      d[idx] = Math.min(255, Math.max(0, Math.round(baseR + stripeR + macro * 0.72 + mid * 0.72 + fine * 0.68 + micro * 0.65 + sunPatch * 0.95)));
-      d[idx + 1] = Math.min(255, Math.max(0, Math.round(baseG + stripeG + macro * 1.05 + mid * 1.0 + fine * 0.95 + micro * 0.85 + sunPatch * 0.65)));
-      d[idx + 2] = Math.min(255, Math.max(0, Math.round(baseB + stripeB + macro * 0.52 + mid * 0.55 + fine * 0.55 + micro * 0.5 - sunPatch * 0.35)));
+      d[idx] = Math.min(255, Math.max(0, Math.round(baseR + stripeR + macro * 0.72 + mid * 0.74 + fine * 0.72 + tuft * 0.7 + micro * 0.68 + sunPatch * 0.88)));
+      d[idx + 1] = Math.min(255, Math.max(0, Math.round(baseG + stripeG + macro * 1.04 + mid * 1.0 + fine * 0.96 + tuft * 0.92 + micro * 0.88 + sunPatch * 0.62)));
+      d[idx + 2] = Math.min(255, Math.max(0, Math.round(baseB + stripeB + macro * 0.52 + mid * 0.56 + fine * 0.56 + tuft * 0.54 + micro * 0.52 - sunPatch * 0.30)));
       d[idx + 3] = 255;
     }
   }
