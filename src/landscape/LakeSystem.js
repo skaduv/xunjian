@@ -664,11 +664,14 @@ function createOpticalWaterMaterial(waterNormalTex, shoreField) {
           vec2 n2 = vec2( n2Raw.x * 0.7986 + n2Raw.y * 0.6018, -n2Raw.x * 0.6018 + n2Raw.y * 0.7986 );
 
           float calmNearShore = mix( 0.42, 1.0, smoothstep( 0.0, 2.2, shoreDist ) );
-          vec2 slope = ( organicSlope * 0.105 + ( n1 * 0.55 + n2 * 0.45 ) * 0.125 ) * calmNearShore;
+          // 暮光/夜间轻柔舒缓水面波斜率，令夜湖呈沉静丝滑玻璃镜面感，彻底消除暗湖面银白杂点斑驳
+          float nightCalm = mix( 1.0, 0.68, uDuskFactor );
+          nightCalm = mix( nightCalm, 0.34, uNightFactor );
+          vec2 slope = ( organicSlope * 0.105 + ( n1 * 0.55 + n2 * 0.45 ) * 0.125 ) * calmNearShore * nightCalm;
 
           // 3. 浮岛周边极柔和同心水纹
           float ringEnv = exp( -max( 0.0, islDist ) * 0.78 ) * smoothstep( 0.0, 0.25, islDist );
-          float ringWave = cos( max( 0.0, islDist ) * 4.4 - t * 1.35 ) * ringEnv * 0.034;
+          float ringWave = cos( max( 0.0, islDist ) * 4.4 - t * 1.35 ) * ringEnv * 0.034 * nightCalm;
           slope += islDir * ringWave;
 
           return slope;
@@ -728,8 +731,9 @@ function createOpticalWaterMaterial(waterNormalTex, shoreField) {
         '#include <roughnessmap_fragment>',
         `#include <roughnessmap_fragment>
         float meniscusRough = ( 1.0 - smoothstep( 0.0, 1.15, lakeShoreDist ) ) * 0.07;
-        float modeRough = mix( 0.085, 0.062, max( uDuskFactor, uNightFactor ) );
-        roughnessFactor = clamp( modeRough + meniscusRough, 0.045, 0.24 );
+        float modeRough = mix( 0.085, 0.095, uDuskFactor );
+        modeRough = mix( modeRough, 0.125, uNightFactor );
+        roughnessFactor = clamp( modeRough + meniscusRough, 0.06, 0.26 );
         `
       )
       .replace(
@@ -747,17 +751,17 @@ function createOpticalWaterMaterial(waterNormalTex, shoreField) {
         vec3 lakeViewDir = normalize( cameraPosition - vWaterWorldPos );
         float lakeNdotV = clamp( dot( lakeWorldNormal, lakeViewDir ), 0.0, 1.0 );
         float lakeFresnel = 0.03 + 0.97 * pow( 1.0 - lakeNdotV, 4.4 );
-        float reflStrength = mix( 0.36, 0.56, uDuskFactor );
-        reflStrength = mix( reflStrength, 0.65, uNightFactor );
+        float reflStrength = mix( 0.36, 0.48, uDuskFactor );
+        reflStrength = mix( reflStrength, 0.40, uNightFactor );
         outgoingLight = mix( outgoingLight, uSkyReflCol, lakeFresnel * reflStrength );
 
-        // 2. 日/月微澜丝绸镜面高光（精准微光，绝不出现零碎白噪点）
+        // 2. 日/月微澜丝绸镜面高光（夜间极克制柔月光，突出贴岸暖琥珀倒影、零银白斑驳）
         vec3 lakeHalfVec = normalize( uSunDir + lakeViewDir );
-        float specBroad = pow( max( dot( lakeWorldNormal, lakeHalfVec ), 0.0 ), 110.0 );
-        float specSharp = pow( max( dot( lakeWorldNormal, lakeHalfVec ), 0.0 ), 420.0 );
-        float glintAmt = mix( 0.42, 0.64, uDuskFactor );
-        glintAmt = mix( glintAmt, 0.42, uNightFactor );
-        outgoingLight += uGlintCol * ( specBroad * 0.16 + specSharp * 0.78 ) * glintAmt;
+        float specBroad = pow( max( dot( lakeWorldNormal, lakeHalfVec ), 0.0 ), 120.0 );
+        float specSharp = pow( max( dot( lakeWorldNormal, lakeHalfVec ), 0.0 ), 460.0 );
+        float glintAmt = mix( 0.42, 0.48, uDuskFactor );
+        glintAmt = mix( glintAmt, 0.11, uNightFactor );
+        outgoingLight += uGlintCol * ( specBroad * 0.14 + specSharp * 0.72 ) * glintAmt;
 
         // 3. 精致磨砂冰青亲水半月面（0.0–1.25m 沿倒角暖石驳岸与生态岛轻柔贴合折射光边）
         float shoreBreath = 0.12 * sin( uTime * 1.1 + lakeXz.x * 0.21 + lakeXz.y * 0.17 )
@@ -807,7 +811,7 @@ function createOpticalWaterMaterial(waterNormalTex, shoreField) {
             vec3 reflCol = mix( coolArch, warmAmber, warmWeight );
             float fresnelBoost = mix( 0.72, 1.18, lakeFresnel );
 
-            outgoingLight += reflCol * reflMask * ( silkyMod + fineSilkGlint ) * fresnelBoost * nightReflDrive * 0.34;
+            outgoingLight += reflCol * reflMask * ( silkyMod + fineSilkGlint ) * fresnelBoost * nightReflDrive * 0.38;
           }
         }
 
@@ -1048,15 +1052,15 @@ export function buildLakeSystem(maxAnisotropy = 8) {
       envIntensity: 1.05,
     },
     night: {
-      shallow: new THREE.Color('#102c44'),
-      mid: new THREE.Color('#091b2e'),
-      deep: new THREE.Color('#06111f'),
-      skyRefl: new THREE.Color('#183052'),
-      meniscus: new THREE.Color('#3c6886'),
-      glint: new THREE.Color('#bddaff'),
+      shallow: new THREE.Color('#0f293f'),
+      mid: new THREE.Color('#08182a'),
+      deep: new THREE.Color('#050f1c'),
+      skyRefl: new THREE.Color('#10233d'),
+      meniscus: new THREE.Color('#2d526e'),
+      glint: new THREE.Color('#7096c2'),
       basin: new THREE.Color('#040a13'),
       sunDir: new THREE.Vector3(170, 220, -145).normalize(),
-      envIntensity: 0.72,
+      envIntensity: 0.34,
     },
   };
 
