@@ -4,13 +4,14 @@ import { DEFAULT_CAMERA_VIEW } from '../config/campusConfig.js';
 import { createStudioBackdropTexture } from './ProceduralTextures.js';
 
 /**
- * 高级工业设计棚拍 WebGL 渲染底座（温暖瓷砂棚拍影调 + 充沛体积光影反差 + 零发白过曝）
+ * 无界航拍生态光影 WebGL 渲染底座（丰润健康翡翠自然光 + 无缝云雾远景 + 昼/暮/夜三态平滑切换）
  * 核心渲染与 GPU 保护策略：
- * 1. 关闭 logarithmicDepthBuffer，配合精准 near=8 / far=2600 恢复硬件 Early-Z / Hi-Z 剔除且保持亚毫米零闪烁
+ * 1. 关闭 logarithmicDepthBuffer，配合精准 near=8 / far=2800 恢复硬件 Early-Z / Hi-Z 剔除且保持亚毫米零闪烁
  * 2. pixelRatio 智能限幅 <= 1.5（叠加 MSAA 抗锯齿）
  * 3. 按需更新阴影贴图（shadowMap.autoUpdate = false）+ 2048 柔化 PCFShadowMap，交互旋转 0 次阴影重绘
- * 4. 约 3.8:1 主辅光比 + 克制暖石地反射半球光 + 三套（白昼/暮光/星夜）定制棚拍 PMREM 环境贴图，塑造奶油感接触阴影与雕塑体积
- * 5. 暴露完整 dispose() 回收所有 GPU 几何体、贴图、PMREM 帧缓冲与 WebGL 上下文
+ * 4. 约 4.5:1 低仰角斜射暖阳主辅光比 + 深翡翠林地反射半球光 + 三套（白昼航拍天光/暮光/星夜）定制 PMREM 环境贴图
+ * 5. 动态镜头自适应远景大气雾（保持核心园区 100% 通透清晰，远端绿野与云海自然溶入地平线）
+ * 6. 暴露完整 dispose() 回收所有 GPU 几何体、贴图、PMREM 帧缓冲与 WebGL 上下文
  */
 
 export class StudioScene {
@@ -23,7 +24,7 @@ export class StudioScene {
     container.innerHTML = '';
 
     this.scene = new THREE.Scene();
-    this.scene.fog = null;
+    this.scene.fog = new THREE.Fog('#dde5e0', 1220, 2150);
 
     this.dayBackdrop = createStudioBackdropTexture('day');
     this.duskBackdrop = createStudioBackdropTexture('dusk');
@@ -44,18 +45,18 @@ export class StudioScene {
     this.renderer.shadowMap.needsUpdate = true;
 
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.94;
+    this.renderer.toneMappingExposure = 1.0;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.appendChild(this.renderer.domElement);
 
     this.maxAnisotropy = Math.min(this.renderer.capabilities.getMaxAnisotropy(), 4);
 
-    // 24° 长焦等轴测主镜头，合理 near=8 / far=2600 保证 24-bit 深度精度无任何 Z-Fighting
+    // 24° 长焦等轴测主镜头，near=8 / far=2800 完整覆盖 2km 无界外围绿野与云雾地平线
     this.camera = new THREE.PerspectiveCamera(
       DEFAULT_CAMERA_VIEW.fov,
       this.width / this.height,
       8.0,
-      2600
+      2800
     );
     this.camera.position.set(...DEFAULT_CAMERA_VIEW.position);
 
@@ -67,13 +68,14 @@ export class StudioScene {
     this.controls.panSpeed = 0.85;
     this.controls.zoomSpeed = 0.95;
     this.controls.minDistance = 42;
-    this.controls.maxDistance = 1350;
-    this.controls.maxPolarAngle = Math.PI * 0.478;
+    this.controls.maxDistance = 1550;
+    this.controls.maxPolarAngle = Math.PI * 0.465;
     this.controls.minPolarAngle = 0.08;
     this.controls.update();
 
     this._buildHighContrastStudioEnv();
     this._buildLightingRig();
+    this._syncFogRange();
 
     this.lightingMode = 'day';
     this.duskFactor = 0;
@@ -142,20 +144,20 @@ export class StudioScene {
       });
     };
 
-    // 1. 白昼工业设计棚拍环境贴图（暗暖地板吸光 + 中暖灰棚壁 + 精准高反差柔光条，拒绝泛白雾化）
+    // 1. 白昼航拍生态天光环境贴图（深翠林地吸光底面 + 清透云雾天穹 + 斜射暖金日光高光带，赋予水面/玻璃真实航拍天光倒影）
     const envScene = new THREE.Scene();
-    envScene.background = new THREE.Color('#3F3B37');
+    envScene.background = new THREE.Color('#6f8984');
 
     const roomMat = new THREE.MeshBasicMaterial({
-      color: '#48443F',
+      color: '#768f8b',
       side: THREE.BackSide,
     });
     envScene.add(new THREE.Mesh(roomGeo, roomMat));
     disposables.push(roomMat);
 
-    // 暖暗吸光底板（为建筑挑檐、车辆底盘与树木冠底提供真实自然暗部反光）
+    // 深翡翠森林吸光底板（为树冠底面、建筑挑檐与玻璃下部注入浓郁生态暗绿环境反射，彻底告别发白发灰）
     const darkFloorMat = new THREE.MeshBasicMaterial({
-      color: '#25221F',
+      color: '#172d1a',
       side: THREE.DoubleSide,
     });
     const darkFloor = new THREE.Mesh(floorGeo, darkFloorMat);
@@ -164,9 +166,9 @@ export class StudioScene {
     envScene.add(darkFloor);
     disposables.push(darkFloorMat);
 
-    // 暖瓷白顶棚柔和反光面（让屋顶与磨砂玻璃具备细腻渐变层次）
+    // 明亮云雾天穹顶面（赋予湖泊与幕墙通透清亮的蓝白航拍天光镜面光泽）
     const ceilMat = new THREE.MeshBasicMaterial({
-      color: '#888178',
+      color: '#c8dcdc',
       side: THREE.DoubleSide,
     });
     const ceilPlane = new THREE.Mesh(floorGeo, ceilMat);
@@ -176,16 +178,16 @@ export class StudioScene {
     disposables.push(ceilMat);
 
     addSoftboxes(envScene, [
-      // 主顶柔光箱（微暖瓷白，塑造丝缎与金属质感高光）
-      { pos: [-20, 35, 18], rot: [Math.PI / 2, 0, 0.25], size: [56, 15], color: '#fff7ec', intensity: 2.55 },
-      // 右前侧暖光轮廓柔光条
-      { pos: [48, 22, 20], rot: [0, -Math.PI / 2, 0], size: [46, 10], color: '#ffeed8', intensity: 1.85 },
-      // 左后侧冷青天光补光反射条（与暖主光形成冷暖体积过渡）
-      { pos: [-48, 18, -24], rot: [0, Math.PI / 2, 0], size: [48, 9], color: '#c8e2f4', intensity: 1.7 },
-      // 后上方利落背光勾边条
-      { pos: [10, 26, -48], rot: [0.3, 0, 0], size: [54, 7], color: '#f2f6fa', intensity: 1.95 },
-      // 低位极克制冰青亚克力反光带（呼应参考图底座冰青灯槽反光）
-      { pos: [0, -16, 44], rot: [-0.22, 0, 0], size: [44, 4], color: '#7adceb', intensity: 0.55 },
+      // 斜射暖金航拍主太阳高光带（对齐低仰角日光方向，点亮草坪叶绿素与树冠向阳面）
+      { pos: [-34, 30, 22], rot: [Math.PI / 2.6, 0.32, 0.2], size: [52, 16], color: '#fff4dc', intensity: 3.05 },
+      // 顶部晴空薄云天顶反射面（为湖水与玻璃屋面提供自然柔亮天空高光）
+      { pos: [4, 36, -6], rot: [Math.PI / 2, 0, 0], size: [64, 24], color: '#eaf5f6', intensity: 1.95 },
+      // 东北侧清透蔚蓝天光补光反射条（在阴影暗面注入高级冷调深度）
+      { pos: [48, 22, -24], rot: [0, -Math.PI / 2, 0], size: [52, 12], color: '#b4daf2', intensity: 1.55 },
+      // 远景云雾地平线微亮勾边
+      { pos: [10, 14, -48], rot: [0.18, 0, 0], size: [60, 10], color: '#e4eeea', intensity: 1.45 },
+      // 极轻柔湖畔翠青水光反射
+      { pos: [0, -18, 44], rot: [-0.22, 0, 0], size: [44, 5], color: '#3a7a6a', intensity: 0.42 },
     ]);
 
     const rt = pmrem.fromScene(envScene, 0.04);
@@ -237,81 +239,102 @@ export class StudioScene {
   }
 
   _buildLightingRig() {
-    // 克制暖瓷天光 + 暖暗石地面反射：释放建筑挑檐、树冠与庭院的立体奶油感 AO 暗部
-    this.hemiLight = new THREE.HemisphereLight('#faf4ec', '#6e6860', 0.42);
+    // 清透晴空天光 + 深翡翠林地反射半球光：彻底消除泛白发灰，令树影与草坡饱满浓郁、层次分明
+    this.hemiLight = new THREE.HemisphereLight('#d9ecff', '#1e3d22', 0.50);
     this.scene.add(this.hemiLight);
 
-    // 紧包围 2048×2048 柔化按需刷新阴影（约 3.8:1 高级棚拍主辅光比，旋转/静止 0 阴影重绘开销）
-    this.sunLight = new THREE.DirectionalLight('#fff4e4', 2.05);
-    this.sunLight.position.set(-205, 255, 170);
+    // 低仰角斜射暖金航拍日光 + 紧包围 2048×2048 柔化按需刷新阴影（约 4.5:1 戏剧光影反差，拉出雕塑感树影与建筑投影）
+    this.sunLight = new THREE.DirectionalLight('#fff1d6', 2.45);
+    this.sunLight.position.set(-265, 205, 165);
     this.sunLight.castShadow = true;
     this.sunLight.shadow.mapSize.set(2048, 2048);
-    this.sunLight.shadow.radius = 2.6;
-    this.sunLight.shadow.camera.near = 60;
-    this.sunLight.shadow.camera.far = 860;
-    this.sunLight.shadow.camera.left = -264;
-    this.sunLight.shadow.camera.right = 264;
-    this.sunLight.shadow.camera.top = 208;
-    this.sunLight.shadow.camera.bottom = -208;
+    this.sunLight.shadow.radius = 2.4;
+    this.sunLight.shadow.camera.near = 40;
+    this.sunLight.shadow.camera.far = 980;
+    this.sunLight.shadow.camera.left = -310;
+    this.sunLight.shadow.camera.right = 310;
+    this.sunLight.shadow.camera.top = 255;
+    this.sunLight.shadow.camera.bottom = -255;
     this.sunLight.shadow.bias = -0.00035;
-    this.sunLight.shadow.normalBias = 0.04;
+    this.sunLight.shadow.normalBias = 0.045;
     this.scene.add(this.sunLight);
 
-    // 冷青天光辅助补光（克制强度，给暗面注入清透冷灰层次而非洗白阴影）
-    this.fillLight = new THREE.DirectionalLight('#c8dcef', 0.30);
-    this.fillLight.position.set(235, 145, -170);
+    // 东北侧冷蓝晴空辅助补光（轻柔通透地衬托林荫暗部，绝不洗白阴影深度）
+    this.fillLight = new THREE.DirectionalLight('#9cc4e4', 0.24);
+    this.fillLight.position.set(245, 135, -185);
     this.scene.add(this.fillLight);
 
-    // 利落棚拍轮廓背光（轻柔提亮倒角边缘与金属质感）
-    this.rimLight = new THREE.DirectionalLight('#e4f2fc', 0.26);
-    this.rimLight.position.set(135, 105, 235);
+    // 柔和叶绿素轮廓背光（轻提树冠边缘与建筑倒角立体感）
+    this.rimLight = new THREE.DirectionalLight('#e4f5ea', 0.24);
+    this.rimLight.position.set(145, 95, 240);
     this.scene.add(this.rimLight);
 
     this.dayLighting = {
-      hemiSky: new THREE.Color('#faf4ec'),
-      hemiGround: new THREE.Color('#6e6860'),
-      hemiIntensity: 0.42,
-      sunColor: new THREE.Color('#fff4e4'),
-      sunIntensity: 2.05,
-      sunPos: new THREE.Vector3(-205, 255, 170),
-      fillColor: new THREE.Color('#c8dcef'),
-      fillIntensity: 0.30,
-      rimColor: new THREE.Color('#e4f2fc'),
-      rimIntensity: 0.26,
-      exposure: 0.94,
+      hemiSky: new THREE.Color('#d9ecff'),
+      hemiGround: new THREE.Color('#1e3d22'),
+      hemiIntensity: 0.50,
+      sunColor: new THREE.Color('#fff1d6'),
+      sunIntensity: 2.45,
+      sunPos: new THREE.Vector3(-265, 205, 165),
+      fillColor: new THREE.Color('#9cc4e4'),
+      fillIntensity: 0.24,
+      rimColor: new THREE.Color('#e4f5ea'),
+      rimIntensity: 0.24,
+      exposure: 1.0,
       envIntensity: 0.48,
+      fogColor: new THREE.Color('#dde5e0'),
+      fogNear: 1220,
+      fogFar: 2150,
     };
 
     this.duskLighting = {
       hemiSky: new THREE.Color('#2a4672'),
-      hemiGround: new THREE.Color('#12161e'),
-      hemiIntensity: 0.32,
+      hemiGround: new THREE.Color('#111c18'),
+      hemiIntensity: 0.34,
       sunColor: new THREE.Color('#ff9e5e'),
-      sunIntensity: 0.78,
-      sunPos: new THREE.Vector3(-248, 92, 132),
+      sunIntensity: 0.86,
+      sunPos: new THREE.Vector3(-268, 86, 138),
       fillColor: new THREE.Color('#3d72be'),
-      fillIntensity: 0.40,
+      fillIntensity: 0.38,
       rimColor: new THREE.Color('#52d6f0'),
-      rimIntensity: 0.52,
-      exposure: 1.0,
+      rimIntensity: 0.48,
+      exposure: 1.02,
       envIntensity: 0.42,
+      fogColor: new THREE.Color('#1b283a'),
+      fogNear: 1240,
+      fogFar: 2200,
     };
 
-    // 深邃午夜月光灯光组（冷银蓝月光勾勒雕塑体块，让暖金灯海、湖面倒影与底座冰青辉光形成极致反差）
+    // 深邃午夜月光灯光组（冷银蓝月光勾勒雕塑体块，让暖金灯海、湖面倒影与深空星夜形成极致反差）
     this.nightLighting = {
       hemiSky: new THREE.Color('#142544'),
-      hemiGround: new THREE.Color('#060a14'),
-      hemiIntensity: 0.24,
+      hemiGround: new THREE.Color('#060c12'),
+      hemiIntensity: 0.25,
       sunColor: new THREE.Color('#8ab6f8'),
-      sunIntensity: 0.44,
-      sunPos: new THREE.Vector3(-190, 232, 162),
+      sunIntensity: 0.46,
+      sunPos: new THREE.Vector3(-210, 222, 165),
       fillColor: new THREE.Color('#1d3866'),
       fillIntensity: 0.22,
       rimColor: new THREE.Color('#46c8ff'),
       rimIntensity: 0.34,
       exposure: 1.08,
       envIntensity: 0.38,
+      fogColor: new THREE.Color('#070f1d'),
+      fogNear: 1260,
+      fogFar: 2250,
     };
+
+    this._baseFogNear = this.dayLighting.fogNear;
+    this._baseFogFar = this.dayLighting.fogFar;
+  }
+
+  _syncFogRange() {
+    if (!this.scene.fog) return;
+    const camDist = this.camera.position.distanceTo(this.controls.target);
+    const span = Math.max(820, (this._baseFogFar ?? 2150) - (this._baseFogNear ?? 1220));
+    const near = Math.max(920, camDist + 300);
+    this.scene.fog.near = near;
+    this.scene.fog.far = near + span;
   }
 
   onDuskChange(cb) {
@@ -410,6 +433,7 @@ export class StudioScene {
     }
 
     this.controls.update();
+    this._syncFogRange();
 
     // 检测阻尼惯性是否仍在滑动，滑停后自动进入低功耗节能态
     if (
@@ -477,6 +501,13 @@ export class StudioScene {
     this.renderer.toneMappingExposure = blendScalar(D.exposure, K.exposure, N.exposure);
     if ('environmentIntensity' in this.scene) {
       this.scene.environmentIntensity = blendScalar(D.envIntensity, K.envIntensity, N.envIntensity);
+    }
+
+    if (this.scene.fog) {
+      blendColor(this.scene.fog.color, D.fogColor, K.fogColor, N.fogColor);
+      this._baseFogNear = blendScalar(D.fogNear, K.fogNear, N.fogNear);
+      this._baseFogFar = blendScalar(D.fogFar, K.fogFar, N.fogFar);
+      this._syncFogRange();
     }
   }
 

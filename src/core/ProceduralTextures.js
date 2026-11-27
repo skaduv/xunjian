@@ -49,7 +49,7 @@ function smoothNoise2d(x, y, period) {
 }
 
 /**
- * 1. 丝缎微缩鼠尾草藓绿草坪（严格周期无缝 45° 修剪斜纹 + 柔和植绒肌理，零拼缝零棋盘格）
+ * 1. 生机盎然的健康叶绿素翡翠草坪（严格整数周期无缝 45° 修剪韵律 + 多尺度自然草甸色阶，零拼缝零发灰）
  */
 export function createMowedLawnTexture(maxAnisotropy = 8) {
   const size = 256;
@@ -57,9 +57,9 @@ export function createMowedLawnTexture(maxAnisotropy = 8) {
 
   const img = ctx.createImageData(size, size);
   const d = img.data;
-  const baseR = 129; // #819b76
-  const baseG = 155;
-  const baseB = 118;
+  const baseR = 64; // #407735 健康浓郁叶绿素翡翠绿基调
+  const baseG = 119;
+  const baseB = 53;
   const stripeCycles = 4; // 整数周期：沿 X/Y 边界严格闭合，彻底消除 tile 接缝
 
   for (let y = 0; y < size; y++) {
@@ -68,22 +68,23 @@ export function createMowedLawnTexture(maxAnisotropy = 8) {
       const u = x / size;
       const idx = (y * size + x) * 4;
 
-      // 严格无缝 45° 园林修剪条带（柔和圆润梯形波，克制 ±5.5 RGB 明暗韵律）
+      // 严格无缝 45° 园林修剪条带（阳光叶绿素暖绿 ↔ 深翠阴影带，自然生动不生硬）
       const phase = (u + v) * Math.PI * 2 * stripeCycles;
-      const stripeWave = Math.sin(phase) * 0.84 + Math.sin(phase * 3) * 0.14;
-      const stripeR = stripeWave * 4.8;
-      const stripeG = stripeWave * 5.6;
-      const stripeB = stripeWave * 4.2;
+      const stripeWave = Math.sin(phase) * 0.82 + Math.sin(phase * 3) * 0.14;
+      const stripeR = stripeWave * 6.5;
+      const stripeG = stripeWave * 8.5;
+      const stripeB = stripeWave * 3.8;
 
-      // 全整数周期多尺度柔和自然草色微差 + 细腻植绒颗粒
-      const macro = (smoothNoise2d(u * 6, v * 6, 6) - 0.5) * 9.0;
-      const mid = (smoothNoise2d(u * 14, v * 14, 14) - 0.5) * 5.5;
-      const micro = (hash2d(x, y) - 0.5) * 4.5;
-      const warmShift = (smoothNoise2d(u * 4 + 1.3, v * 4 + 2.7, 4) - 0.5) * 4.5;
+      // 全整数周期多尺度自然生态草坪层次 + 细腻有机草叶肌理
+      const macro = (smoothNoise2d(u * 4, v * 4, 4) - 0.5) * 14.0;
+      const mid = (smoothNoise2d(u * 8 + 1.7, v * 8 + 3.1, 8) - 0.5) * 9.0;
+      const fine = (smoothNoise2d(u * 16 + 4.3, v * 16 + 0.9, 16) - 0.5) * 6.5;
+      const micro = (hash2d(x, y) - 0.5) * 7.5;
+      const sunPatch = (smoothNoise2d(u * 3 + 0.6, v * 3 + 2.1, 3) - 0.5) * 9.5;
 
-      d[idx] = Math.min(255, Math.max(0, Math.round(baseR + stripeR + macro * 0.85 + mid * 0.8 + micro + warmShift)));
-      d[idx + 1] = Math.min(255, Math.max(0, Math.round(baseG + stripeG + macro + mid + micro)));
-      d[idx + 2] = Math.min(255, Math.max(0, Math.round(baseB + stripeB + macro * 0.75 + mid * 0.75 + micro - warmShift * 0.35)));
+      d[idx] = Math.min(255, Math.max(0, Math.round(baseR + stripeR + macro * 0.72 + mid * 0.72 + fine * 0.68 + micro * 0.65 + sunPatch * 0.95)));
+      d[idx + 1] = Math.min(255, Math.max(0, Math.round(baseG + stripeG + macro * 1.05 + mid * 1.0 + fine * 0.95 + micro * 0.85 + sunPatch * 0.65)));
+      d[idx + 2] = Math.min(255, Math.max(0, Math.round(baseB + stripeB + macro * 0.52 + mid * 0.55 + fine * 0.55 + micro * 0.5 - sunPatch * 0.35)));
       d[idx + 3] = 255;
     }
   }
@@ -100,8 +101,8 @@ export function createAsphaltRoadTexture(variant = 'campus', maxAnisotropy = 8) 
   const h = 256;
   const { canvas, ctx } = makeCanvas(w, h);
 
-  // 高级工业设计深石板炭灰，立刻拉开道路与草坪/建筑/路缘石的清晰层次
-  ctx.fillStyle = variant === 'arterial' ? '#484e57' : variant === 'firelane' ? '#5d636d' : '#545b65';
+  // 深邃利落的深石板炭灰沥青，与浓郁翡翠草坪形成高级航拍明暗反差
+  ctx.fillStyle = variant === 'arterial' ? '#404750' : variant === 'firelane' ? '#565d67' : '#4c535d';
   ctx.fillRect(0, 0, w, h);
 
   // 柔和车辙与细粒沥青石骨料肌理
@@ -584,10 +585,10 @@ export function createStudioBackdropTexture(mode = 'day') {
     const h = 256;
     const { canvas, ctx } = makeCanvas(w, h);
     const grad = ctx.createLinearGradient(0, 0, 0, h);
-    grad.addColorStop(0.0, '#0d1624');
-    grad.addColorStop(0.48, '#18273b');
-    grad.addColorStop(0.78, '#233043');
-    grad.addColorStop(1.0, '#121b28');
+    grad.addColorStop(0.0, '#0c1524');
+    grad.addColorStop(0.45, '#162336');
+    grad.addColorStop(0.75, '#1e2c40');
+    grad.addColorStop(1.0, '#1b283a');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, w, h);
 
@@ -597,22 +598,24 @@ export function createStudioBackdropTexture(mode = 'day') {
     return tex;
   }
 
-  // 白昼温暖瓷砂棚拍无影墙（柔和垂向暖象牙渐变 + 中心微暖棚拍柔光晕 + 四角温润暗角）
+  // 白昼无界云雾地平线大气背景（精准对齐场景远雾 #dde5e0 与周边体积云海，彻底消除硬地平线断层）
   const w = 512;
   const h = 512;
   const { canvas, ctx } = makeCanvas(w, h);
   const grad = ctx.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0.0, '#f3eee8');
-  grad.addColorStop(0.52, '#eae2d9');
-  grad.addColorStop(1.0, '#dbd1c6');
+  grad.addColorStop(0.0, '#d8e4e2');
+  grad.addColorStop(0.42, '#dde5e0');
+  grad.addColorStop(0.74, '#dce4df');
+  grad.addColorStop(1.0, '#d3ddd8');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, w, h);
 
-  const keyGlow = ctx.createRadialGradient(w * 0.44, h * 0.40, 24, w * 0.5, h * 0.46, w * 0.62);
-  keyGlow.addColorStop(0.0, 'rgba(255, 252, 247, 0.42)');
-  keyGlow.addColorStop(0.55, 'rgba(252, 246, 238, 0.12)');
-  keyGlow.addColorStop(1.0, 'rgba(202, 191, 178, 0.14)');
-  ctx.fillStyle = keyGlow;
+  // 柔和航拍日光大气漫射高光（呼应斜射暖阳方向，令云雾天际通透自然）
+  const sunHaze = ctx.createRadialGradient(w * 0.32, h * 0.34, 18, w * 0.36, h * 0.42, w * 0.68);
+  sunHaze.addColorStop(0.0, 'rgba(255, 253, 246, 0.42)');
+  sunHaze.addColorStop(0.50, 'rgba(242, 248, 244, 0.14)');
+  sunHaze.addColorStop(1.0, 'rgba(182, 198, 191, 0.08)');
+  ctx.fillStyle = sunHaze;
   ctx.fillRect(0, 0, w, h);
 
   const tex = new THREE.CanvasTexture(canvas);
@@ -812,10 +815,10 @@ export function createContactShadowTexture(maxAnisotropy = 4) {
   const { canvas, ctx } = makeCanvas(size, size);
   const half = size * 0.5;
   const grad = ctx.createRadialGradient(half, half, 0, half, half, half);
-  grad.addColorStop(0.0, 'rgba(38, 32, 28, 0.72)');
-  grad.addColorStop(0.38, 'rgba(42, 36, 30, 0.44)');
-  grad.addColorStop(0.72, 'rgba(46, 40, 34, 0.14)');
-  grad.addColorStop(1.0, 'rgba(46, 40, 34, 0.0)');
+  grad.addColorStop(0.0, 'rgba(18, 34, 20, 0.74)');
+  grad.addColorStop(0.38, 'rgba(22, 38, 24, 0.46)');
+  grad.addColorStop(0.72, 'rgba(26, 42, 26, 0.15)');
+  grad.addColorStop(1.0, 'rgba(26, 42, 26, 0.0)');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, size, size);
 
