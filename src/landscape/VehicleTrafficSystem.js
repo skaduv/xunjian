@@ -551,45 +551,48 @@ function createHeadlightBeamTexture() {
 }
 
 // ============================================================================
-// 4. 园区真实连通道路有向图（100% 精准对齐 RoadAndParking.js 样条，修复 R8、R9！）
+// 4. 园区真实连通道路有向图（100% 精准对齐 RoadAndParking.js 无界主干道与南北双岛十字路口！）
 // ============================================================================
 
 const ROAD_NODES = {
-  // ---- 6 个市政主干道边界出入口（严格处于底座圆角内框 ±242.2 × ±183.2 之内） ----
-  P_ZGC_N: { x: -208.3, z: -177.5, kind: 'portal' },
-  P_ZGC_S: { x: -223.7, z: 177.5, kind: 'portal' },
-  P_PL_W: { x: -236.5, z: -101.2, kind: 'portal' },
-  P_PL_NE: { x: 143.0, z: -179.0, kind: 'portal' }, // 修复 R8：精准对齐平陵西路中心线
-  P_YP_W: { x: -236.5, z: 116.3, kind: 'portal' },
-  P_YP_S: { x: -105.5, z: 176.0, kind: 'portal' },
+  // ---- 6 个市政主干道无界外延出入口（深入云雾渐隐区 d_out ≈ 140–155m，彻底消除园区边沿突兀刷新！） ----
+  P_ZGC_N: { x: -203.4, z: -338.0, kind: 'portal' },
+  P_ZGC_S: { x: -230.0, z: 338.0, kind: 'portal' },
+  P_PL_W: { x: -395.0, z: -71.5, kind: 'portal' },
+  P_PL_NE: { x: 356.0, z: -226.8, kind: 'portal' },
+  P_YP_W: { x: -396.0, z: 36.0, kind: 'portal' },
+  P_YP_S: { x: 125.0, z: 292.3, kind: 'portal' },
 
-  // ---- 市政主干道主交叉口 ----
-  J_PL_ZGC: { x: -211.0, z: -106.0, kind: 'junction' },
-  J_FIRE_W: { x: -212.2, z: -66.0, kind: 'junction' },
+  // ---- 市政主干道主交叉口（与 RoadAndParking.js 精准 0mm 对齐） ----
+  J_PL_ZGC: { x: -210.5, z: -106.4, kind: 'junction' },
+  J_FIRE_W: { x: -212.1, z: -66.0, kind: 'junction' },
   J_WEST_BR: { x: -216.2, z: 22.0, kind: 'junction' },
-  J_YP_ZGC: { x: -221.0, z: 122.0, kind: 'junction' },
-  J_NORTH_GATE: { x: 26.0, z: -153.8, kind: 'junction' },
+  J_YP_ZGC: { x: -221.6, z: 121.8, kind: 'junction' },
+  J_NORTH_GATE: { x: 26.0, z: -154.1, kind: 'junction' },
 
-  // ---- 北迎宾大道分道与中央大入口门廊回转广场（精准对齐 FireRing z=-107.9，零压路缘/柱灯！） ----
+  // ---- 北迎宾大道分幅双岛 + 开敞四向消防环道十字路口 + 中央大入口落客回转广场 ----
   N_WELC_S: { x: 20.1, z: -134.0, kind: 'campus' },
   N_WELC_N: { x: 31.9, z: -134.0, kind: 'campus' },
-  J_PLAZA_SW: { x: 20.1, z: -94.5, kind: 'campus', patrolGoal: true },
-  J_PLAZA_SE: { x: 31.9, z: -94.5, kind: 'campus', patrolGoal: true },
-  J_PLAZA_W: { x: 10.0, z: -107.9, kind: 'campus' }, // 修复 R8：精准落在 FireRing 中心线
-  J_PLAZA_E: { x: 42.0, z: -107.9, kind: 'campus' }, // 修复 R8：精准落在 FireRing 中心线
+  N_CROSS_W: { x: 20.1, z: -108.0, kind: 'campus' },
+  N_CROSS_E: { x: 31.9, z: -108.0, kind: 'campus' },
+  J_PLAZA_C: { x: 26.0, z: -108.0, kind: 'campus' },
+  J_PLAZA_SW: { x: 20.1, z: -88.2, kind: 'campus', patrolGoal: true },
+  J_PLAZA_SE: { x: 31.9, z: -88.2, kind: 'campus', patrolGoal: true },
+  J_PLAZA_W: { x: 10.0, z: -108.0, kind: 'campus' },
+  J_PLAZA_E: { x: 42.0, z: -108.0, kind: 'campus' },
 
   // ---- 内部消防环道、西翼支线与停车场喉道 ----
-  J_WEST_FIRE: { x: -144.0, z: -94.9, kind: 'campus', patrolGoal: true }, // 修复 R8
-  J_WPARK_GATE: { x: -146.0, z: -10.0, kind: 'campus', patrolGoal: true },
+  J_WEST_FIRE: { x: -144.0, z: -94.9, kind: 'campus', patrolGoal: true },
+  J_WPARK_GATE: { x: -145.35, z: -10.0, kind: 'campus', patrolGoal: true },
   D_WPARK: { x: -123.5, z: -10.0, kind: 'terminal', patrolGoal: true },
-  J_NEPARK_GATE: { x: 89.5, z: -105.85, kind: 'campus', patrolGoal: true }, // 精准落在 FireRing 与 NE 引道交点
-  D_NEPARK: { x: 89.5, z: -119.5, kind: 'terminal', patrolGoal: true }, // 对齐 NE 停车场新中心
-  J_EAST_CORNER: { x: 96.1, z: -103.9, kind: 'campus' }, // 修复 R8
+  J_NEPARK_GATE: { x: 89.5, z: -105.85, kind: 'campus', patrolGoal: true },
+  D_NEPARK: { x: 89.5, z: -119.5, kind: 'terminal', patrolGoal: true },
+  J_EAST_CORNER: { x: 96.1, z: -103.95, kind: 'campus' },
   J_EAST_MID: { x: 97.6, z: -42.0, kind: 'campus', patrolGoal: true },
-  D_EAST_PORTAL: { x: 96.0, z: 17.8, kind: 'terminal', patrolGoal: true }, // 修复 R9：北退 1.2m 避让东栈桥端头
+  D_EAST_PORTAL: { x: 96.0, z: 17.5, kind: 'terminal', patrolGoal: true },
 };
 
-// 末端掉头平滑圆弧（与停车场车位及东栈桥端头留足 >= 1.3m~3.0m 安全净距）
+// 末端掉头平滑圆弧（与停车场车位、东掉头广场 (96,21.8,r=5.0) 及东栈桥留足 >= 1.5m~3.0m 安全净距）
 const TERMINAL_TURNAROUNDS = {
   D_WPARK: [
     [-123.5, -8.55],
@@ -605,13 +608,13 @@ const TERMINAL_TURNAROUNDS = {
     [87.2, -123.2],
     [88.05, -119.5],
   ],
-  // 修复 R9：顶点北退至 z = 21.7（大型 SUV 外缘 22.71，距 24.0 道路尽头/东栈桥留足 1.29m 安全净距！）
+  // 东侧门洞圆形掉头广场 (96.0, 21.8, r=5.0)：SUV 外缘距圆弧路缘 >= 1.5m，距东栈桥零侵入！
   D_EAST_PORTAL: [
-    [94.45, 17.8],
-    [94.65, 20.6],
-    [96.0, 21.7],
-    [97.35, 20.6],
-    [97.55, 17.8],
+    [94.45, 17.5],
+    [93.8, 21.8],
+    [96.0, 24.1],
+    [98.2, 21.8],
+    [97.55, 17.5],
   ],
 };
 
@@ -635,6 +638,7 @@ function buildRoadGraph() {
       pts,
       length,
       roadClass: opts.roadClass,
+      roadTopY: opts.roadTopY,
       laneOffset: opts.laneOffset,
       speedLimit: opts.speedLimit,
       patrolAllowed: opts.patrolAllowed ?? false,
@@ -646,73 +650,64 @@ function buildRoadGraph() {
     addDirected(v, u, via ? [...via].reverse() : null, opts);
   };
 
-  // 1. 西侧市政主干道：中关村大道
-  const zgcOpts = { roadClass: 'arterial', laneOffset: 3.6, speedLimit: 13.8, patrolAllowed: false };
-  addBidirectional('P_ZGC_N', 'J_PL_ZGC', null, zgcOpts);
-  addBidirectional('J_PL_ZGC', 'J_FIRE_W', [[-211.2, -92]], zgcOpts);
-  addBidirectional('J_FIRE_W', 'J_WEST_BR', [[-214.0, -24], [-216.0, 15]], zgcOpts);
-  addBidirectional('J_WEST_BR', 'J_YP_ZGC', [[-218.8, 72], [-221.0, 110]], zgcOpts);
-  addBidirectional('J_YP_ZGC', 'P_ZGC_S', null, zgcOpts);
+  // 1. 西侧市政主干道：中关村大道（19.6m 双向六车道 + 中央绿化分隔带，laneOffset = 4.6m，距中分带 >=1.68m、距外路缘 >=2.98m）
+  const zgcOpts = { roadClass: 'arterial', roadTopY: ROAD_Y.ZGC, laneOffset: 4.6, speedLimit: 14.5, patrolAllowed: false };
+  addBidirectional('P_ZGC_N', 'J_PL_ZGC', [[-205.0, -294.0], [-208.0, -184.0]], zgcOpts);
+  addBidirectional('J_PL_ZGC', 'J_FIRE_W', [[-211.0, -92.0]], zgcOpts);
+  addBidirectional('J_FIRE_W', 'J_WEST_BR', [[-214.0, -24.0], [-216.0, 15.0]], zgcOpts);
+  addBidirectional('J_WEST_BR', 'J_YP_ZGC', [[-218.8, 72.0], [-221.0, 110.0]], zgcOpts);
+  addBidirectional('J_YP_ZGC', 'P_ZGC_S', [[-224.0, 184.0], [-228.0, 294.0]], zgcOpts);
 
-  // 2. 北侧市政主干道：平陵西路
-  const plOpts = { roadClass: 'arterial', laneOffset: 3.4, speedLimit: 13.5, patrolAllowed: false };
-  addBidirectional('P_PL_W', 'J_PL_ZGC', null, plOpts);
-  addBidirectional('J_PL_ZGC', 'J_NORTH_GATE', [[-130, -124], [-25, -144]], plOpts);
-  addBidirectional('J_NORTH_GATE', 'P_PL_NE', [[65, -162]], plOpts);
+  // 2. 北侧市政主干道：平陵西路（15.5m 双向四车道）
+  const plOpts = { roadClass: 'arterial', roadTopY: ROAD_Y.PINGLING, laneOffset: 3.4, speedLimit: 14.0, patrolAllowed: false };
+  addBidirectional('P_PL_W', 'J_PL_ZGC', [[-351.0, -80.0], [-243.0, -100.0]], plOpts);
+  addBidirectional('J_PL_ZGC', 'J_NORTH_GATE', [[-130.0, -124.0], [-25.0, -144.0]], plOpts);
+  addBidirectional('J_NORTH_GATE', 'P_PL_NE', [[65.0, -162.0], [164.0, -184.0], [272.0, -208.0]], plOpts);
 
-  // 3. 西南市政主干道：永平大道
-  const ypOpts = { roadClass: 'arterial', laneOffset: 3.3, speedLimit: 13.0, patrolAllowed: false };
-  addBidirectional('P_YP_W', 'J_YP_ZGC', null, ypOpts);
-  addBidirectional('J_YP_ZGC', 'P_YP_S', [[-186, 138], [-138, 164]], ypOpts);
+  // 3. 西南市政主干道：永平大道（15.0m 顺直 26.2° 双向四车道）
+  const ypOpts = { roadClass: 'arterial', roadTopY: ROAD_Y.YONGPING, laneOffset: 3.3, speedLimit: 13.5, patrolAllowed: false };
+  addBidirectional('P_YP_W', 'J_YP_ZGC', [[-346.0, 60.6], [-243.0, 111.3]], ypOpts);
+  addBidirectional('J_YP_ZGC', 'P_YP_S', [[-186.0, 139.3], [-138.0, 162.9], [-94.0, 184.6], [6.0, 233.8]], ypOpts);
 
-  // 4. 北迎宾大道（单向分流绕过中央种植岛）
-  addDirected('J_NORTH_GATE', 'N_WELC_S', [[21.4, -145]], {
-    roadClass: 'campus',
-    laneOffset: 0.0,
-    speedLimit: 7.4,
-    patrolAllowed: false,
-  });
-  addDirected('N_WELC_S', 'J_PLAZA_SW', [[20.1, -114]], {
-    roadClass: 'campus',
-    laneOffset: 0.0,
-    speedLimit: 6.8,
-    patrolAllowed: false,
-  });
-  addDirected('J_PLAZA_SE', 'N_WELC_N', [[31.9, -114]], {
-    roadClass: 'campus',
-    laneOffset: 0.0,
-    speedLimit: 6.8,
-    patrolAllowed: false,
-  });
-  addDirected('N_WELC_N', 'J_NORTH_GATE', [[30.6, -145]], {
-    roadClass: 'campus',
-    laneOffset: 0.0,
-    speedLimit: 7.4,
-    patrolAllowed: false,
-  });
+  // 4. 北迎宾大道（南北分幅双岛单向分流，经开敞四向十字路口衔接中央大入口落客广场）
+  const welcOpts = { roadClass: 'campus', roadTopY: ROAD_Y.WELCOME, laneOffset: 0.0, speedLimit: 7.4, patrolAllowed: false };
+  const dropoffOpts = { roadClass: 'plaza', roadTopY: ROAD_Y.PLAZA, laneOffset: 0.0, speedLimit: 5.8, patrolAllowed: true };
 
-  // 5. 中央门廊迎宾广场横穿段（修复 R8：过渡控制点 [11.5,-101.0] / [40.5,-101.0] 精准避让路缘与柱灯）
-  const plazaOpts = { roadClass: 'plaza', laneOffset: 1.55, speedLimit: 5.8, patrolAllowed: true };
-  addBidirectional('J_PLAZA_SW', 'J_PLAZA_SE', null, plazaOpts);
-  addBidirectional('J_PLAZA_W', 'J_PLAZA_SW', [[11.5, -101.0]], plazaOpts);
-  addBidirectional('J_PLAZA_SE', 'J_PLAZA_E', [[40.5, -101.0]], plazaOpts);
+  // 北段进出（平陵西路 <-> 消防环道十字路口）
+  addDirected('J_NORTH_GATE', 'N_WELC_S', [[21.4, -145.0]], welcOpts);
+  addDirected('N_WELC_S', 'N_CROSS_W', null, welcOpts);
+  addDirected('N_CROSS_E', 'N_WELC_N', null, welcOpts);
+  addDirected('N_WELC_N', 'J_NORTH_GATE', [[30.6, -145.0]], welcOpts);
 
-  // 6. 内部消防环道
-  const fireOpts = { roadClass: 'campus', laneOffset: 1.55, speedLimit: 7.2, patrolAllowed: true };
-  addBidirectional('J_FIRE_W', 'J_WEST_FIRE', [[-174, -84]], fireOpts);
-  addBidirectional('J_WEST_FIRE', 'J_PLAZA_W', [[-130, -98], [-58, -106]], fireOpts);
-  addBidirectional('J_PLAZA_E', 'J_NEPARK_GATE', [[66, -107.2]], fireOpts);
+  // 十字路口转接（允许北迎宾大道与消防环道自由互通）
+  addDirected('N_CROSS_W', 'J_PLAZA_C', null, { ...welcOpts, patrolAllowed: true });
+  addDirected('J_PLAZA_C', 'N_CROSS_E', null, { ...welcOpts, patrolAllowed: true });
+  addDirected('J_PLAZA_C', 'N_CROSS_W', null, { ...welcOpts, patrolAllowed: true });
+  addDirected('N_CROSS_E', 'J_PLAZA_C', null, { ...welcOpts, patrolAllowed: true });
+
+  // 南落客岛逆时针 VIP 落客回转环（完美绕行南岛 z ∈ [-101.6, -92.6]，零侵占路缘与柱灯！）
+  addDirected('N_CROSS_W', 'J_PLAZA_SW', null, dropoffOpts);
+  addDirected('J_PLAZA_SW', 'J_PLAZA_SE', null, dropoffOpts);
+  addDirected('J_PLAZA_SE', 'N_CROSS_E', null, dropoffOpts);
+
+  // 5. 内部消防环道（于 z = -108.0 径直贯通北迎宾四向十字路口，彻底告别强行绕道南广场！）
+  const fireOpts = { roadClass: 'campus', roadTopY: ROAD_Y.FIRE_LOT, laneOffset: 1.55, speedLimit: 7.2, patrolAllowed: true };
+  addBidirectional('J_FIRE_W', 'J_WEST_FIRE', [[-174.0, -84.0]], fireOpts);
+  addBidirectional('J_WEST_FIRE', 'J_PLAZA_W', [[-130.0, -98.0], [-58.0, -106.0]], fireOpts);
+  addBidirectional('J_PLAZA_W', 'J_PLAZA_C', null, fireOpts);
+  addBidirectional('J_PLAZA_C', 'J_PLAZA_E', null, fireOpts);
+  addBidirectional('J_PLAZA_E', 'J_NEPARK_GATE', [[66.0, -107.2]], fireOpts);
   addBidirectional('J_NEPARK_GATE', 'J_EAST_CORNER', null, fireOpts);
-  addBidirectional('J_EAST_CORNER', 'J_EAST_MID', [[98.0, -68]], fireOpts);
-  addBidirectional('J_EAST_MID', 'D_EAST_PORTAL', [[97.0, -12]], fireOpts);
+  addBidirectional('J_EAST_CORNER', 'J_EAST_MID', [[99.1, -99.1], [99.95, -91.0], [99.4, -80.2], [98.2, -68.0]], fireOpts);
+  addBidirectional('J_EAST_MID', 'D_EAST_PORTAL', [[97.0, -12.0]], fireOpts);
 
-  // 7. 西翼支线
-  const branchOpts = { roadClass: 'campus', laneOffset: 1.55, speedLimit: 6.8, patrolAllowed: true };
-  addBidirectional('J_WEST_BR', 'J_WPARK_GATE', [[-168, 22], [-146, 18]], branchOpts);
-  addBidirectional('J_WPARK_GATE', 'J_WEST_FIRE', [[-146, -34], [-145, -66]], branchOpts);
+  // 6. 西翼支线
+  const branchOpts = { roadClass: 'campus', roadTopY: ROAD_Y.BRANCH_APRON, laneOffset: 1.55, speedLimit: 6.8, patrolAllowed: true };
+  addBidirectional('J_WEST_BR', 'J_WPARK_GATE', [[-168.0, 22.0], [-153.0, 21.9], [-148.0, 20.4], [-146.1, 18.2], [-145.0, 6.0]], branchOpts);
+  addBidirectional('J_WPARK_GATE', 'J_WEST_FIRE', [[-146.0, -34.0], [-145.0, -66.0]], branchOpts);
 
-  // 8. 停车场出入口引道
-  const parkOpts = { roadClass: 'parking', laneOffset: 1.45, speedLimit: 5.0, patrolAllowed: true };
+  // 7. 停车场出入口引道
+  const parkOpts = { roadClass: 'parking', roadTopY: ROAD_Y.FIRE_LOT, laneOffset: 1.45, speedLimit: 5.0, patrolAllowed: true };
   addBidirectional('J_WPARK_GATE', 'D_WPARK', null, parkOpts);
   addBidirectional('J_NEPARK_GATE', 'D_NEPARK', null, parkOpts);
 
@@ -764,29 +759,29 @@ function findShortestPath(adj, startId, goalId, { patrolOnly = false, avoidFirst
 // 5. 靠右车道偏移 + 二次贝塞尔平滑圆角 + 精确 0mm 误差路面标高采样（修复 R9！）
 // ============================================================================
 
-function sampleRoadSurfaceY(x, z) {
-  // 1. 三个市政交叉口圆角过渡垫层 (0.076)
-  const d1 = (x + 211) * (x + 211) + (z + 106) * (z + 106);
-  const d2 = (x + 221) * (x + 221) + (z - 122) * (z - 122);
-  const d3 = (x - 26) * (x - 26) + (z + 153.2) * (z + 153.2);
-  if (d1 < 12.2 * 12.2 || d2 < 11.8 * 11.8 || d3 < 8.6 * 8.6) {
+function sampleRoadSurfaceY(x, z, edgeRoadTopY = null) {
+  // 1. 三个市政精细交叉口沥青垫层 (0.076)
+  const d1 = (x + 210.5) * (x + 210.5) + (z + 106.4) * (z + 106.4);
+  const d2 = (x + 221.6) * (x + 221.6) + (z - 121.8) * (z - 121.8);
+  const d3 = (x - 26.0) * (x - 26.0) + (z + 154.1) * (z + 154.1);
+  if (d1 < 13.8 * 13.8 || d2 < 13.8 * 13.8 || (d3 < 10.5 * 10.5 && z >= -161.8)) {
     return ROAD_Y.JUNCTION;
   }
-  // 2. 北迎宾广场 (0.072)
-  if (x >= 8 && x <= 44 && z >= -107 && z <= -81) {
+  // 2. 中央门廊北迎宾广场 (0.072，精确对齐 plazaBox z ∈ [-104.6, -81.0])
+  if (x >= 8 && x <= 44 && z >= -104.6 && z <= -81) {
     return ROAD_Y.PLAZA;
   }
-  // 3. 西侧中关村大道 (0.072)
-  if (x < -199) {
-    return ROAD_Y.ZGC;
-  }
-  // 4. 北迎宾大道（广场北侧至平陵路口，0.066）
-  if (x >= 17 && x <= 35 && z >= -150 && z < -107) {
+  // 3. 北迎宾大道及十字交叉口铺装面 (0.066，精确覆盖 x ∈ [17.6, 34.4], z ∈ [-154.1, -104.2])
+  if (x >= 17.6 && x <= 34.4 && z >= -154.1 && z < -104.6) {
     return ROAD_Y.WELCOME;
   }
-  // 5. 西停车场入口沥青过渡喉道 (0.066)
-  if (x >= -137.0 && x <= -125.4 && z >= -14.3 && z <= -5.7) {
+  // 4. 西停车场入口沥青过渡喉道 (0.066)
+  if (x >= -137.0 && x <= -124.2 && z >= -16.68 && z <= -3.32) {
     return ROAD_Y.WELCOME;
+  }
+  // 5. 东侧门洞圆形掉头广场 (0.058，精确匹配 eastTurnBulb)
+  if (x >= 90.5 && x <= 101.5 && z >= 17.5 && z <= 27.2) {
+    return ROAD_Y.BRANCH_APRON;
   }
   // 6. 西停车场与东北停车场 (0.062)
   if (x >= -137.0 && x <= -103.0 && z >= -32.0 && z <= 12.0) {
@@ -799,19 +794,11 @@ function sampleRoadSurfaceY(x, z) {
   if (x >= 85.0 && x <= 94.0 && z > -110.0 && z < -107.6) {
     return ROAD_Y.BRANCH_APRON;
   }
-  // 8. 北侧平陵西路 (0.068) — 严格避开东北停车场 (z >= -130)
-  if (z < -130) {
-    return ROAD_Y.PINGLING;
+  // 8. 精确使用当前路段的原生路面标高（根治平陵西路/永平大道外延与交界处的 4~8mm 悬浮/下陷！）
+  if (edgeRoadTopY !== null) {
+    return edgeRoadTopY;
   }
-  // 9. 西南永平大道 (0.064)
-  if (z > 110) {
-    return ROAD_Y.YONGPING;
-  }
-  // 10. 西翼消防支线与西停车场入口引道 (0.058)
-  if (x >= -199 && x <= -137.0 && z >= -90.5 && z <= 27.0) {
-    return ROAD_Y.BRANCH_APRON;
-  }
-  // 11. 其余内部消防环道 (0.062)
+  // 静态泊车等无路段上下文回退
   return ROAD_Y.FIRE_LOT;
 }
 
@@ -819,8 +806,9 @@ function compileSmoothRoute(edgePath, { arterialLaneDelta = 0, prependTurnaround
   const rawPts = [];
 
   if (prependTurnaround && prependTurnaround.length > 0) {
+    const startEdgeY = edgePath[0]?.roadTopY ?? ROAD_Y.FIRE_LOT;
     for (const [tx, tz] of prependTurnaround) {
-      rawPts.push({ x: tx, z: tz, speedLimit: 4.2, isCorner: false, fillet: 2.2 });
+      rawPts.push({ x: tx, z: tz, speedLimit: 4.2, roadTopY: startEdgeY, isCorner: false, fillet: 2.2 });
     }
   }
 
@@ -850,7 +838,7 @@ function compileSmoothRoute(edgePath, { arterialLaneDelta = 0, prependTurnaround
         if (Math.hypot(ox - last.x, oz - last.z) < 0.9) continue;
       }
 
-      rawPts.push({ x: ox, z: oz, speedLimit: edge.speedLimit, fillet });
+      rawPts.push({ x: ox, z: oz, speedLimit: edge.speedLimit, roadTopY: edge.roadTopY, fillet });
     }
   }
 
@@ -915,6 +903,7 @@ function compileSmoothRoute(edgePath, { arterialLaneDelta = 0, prependTurnaround
         x: omt * omt * ax + 2 * omt * t * curr.x + t * t * bx,
         z: omt * omt * az + 2 * omt * t * curr.z + t * t * bz,
         speedLimit: cornerSpeed,
+        roadTopY: t < 0.5 ? prev.roadTopY : next.roadTopY,
       });
     }
   }
@@ -922,7 +911,13 @@ function compileSmoothRoute(edgePath, { arterialLaneDelta = 0, prependTurnaround
 
   const samples = [];
   let accumS = 0;
-  samples.push({ x: filleted[0].x, z: filleted[0].z, s: 0, speedLimit: filleted[0].speedLimit });
+  samples.push({
+    x: filleted[0].x,
+    z: filleted[0].z,
+    s: 0,
+    speedLimit: filleted[0].speedLimit,
+    roadTopY: filleted[0].roadTopY,
+  });
 
   for (let i = 1; i < filleted.length; i++) {
     const a = filleted[i - 1];
@@ -941,6 +936,7 @@ function compileSmoothRoute(edgePath, { arterialLaneDelta = 0, prependTurnaround
         z: pz,
         s: accumS,
         speedLimit: Math.min(a.speedLimit, b.speedLimit),
+        roadTopY: b.roadTopY,
       });
     }
   }
@@ -957,7 +953,7 @@ function compileSmoothRoute(edgePath, { arterialLaneDelta = 0, prependTurnaround
     samples[i].fx = dx / len;
     samples[i].fz = dz / len;
     samples[i].rotY = Math.atan2(-samples[i].fz, samples[i].fx);
-    samples[i].y = sampleRoadSurfaceY(samples[i].x, samples[i].z);
+    samples[i].y = sampleRoadSurfaceY(samples[i].x, samples[i].z, samples[i].roadTopY);
   }
 
   for (let i = 0; i < count; i++) {
@@ -1748,12 +1744,13 @@ export function buildVehicleTrafficSystem(maxAnisotropy = 4) {
 
       let scale = 1.0;
       const startKind = ROAD_NODES[v.route.startNode].kind;
-      if (startKind === 'portal' && v.dist < 5.0) {
-        const t = Math.max(0.01, v.dist / 5.0);
+      // 在无界云雾端头 24m 内丝滑渐入渐出，彻底消除突兀刷车
+      if (startKind === 'portal' && v.dist < 24.0) {
+        const t = Math.max(0.01, v.dist / 24.0);
         scale = Math.min(scale, t * (2 - t));
       }
-      if (endKind === 'portal' && v.route.totalLength - v.dist < 5.0) {
-        const t = Math.max(0.01, (v.route.totalLength - v.dist) / 5.0);
+      if (endKind === 'portal' && v.route.totalLength - v.dist < 24.0) {
+        const t = Math.max(0.01, (v.route.totalLength - v.dist) / 24.0);
         scale = Math.min(scale, t * (2 - t));
       }
       v.scale = scale;

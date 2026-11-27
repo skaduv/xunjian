@@ -893,12 +893,12 @@ function buildUndergroundGarageRamp({
     cap.receiveShadow = true;
     grp.add(cap);
   };
-  // 东侧路缘 (z ∈ [-103.5, -87.18])
-  addRampApronCurb(76.41, -95.34, 0.42, 16.32);
+  // 东侧路缘 (z ∈ [-103.10, -87.18]，精准衔接南移后的 FireRing 路缘外沿，零侵占车行道)
+  addRampApronCurb(76.41, -95.14, 0.42, 15.92);
   // 南侧收口路缘 (x ∈ [70.0, 76.62]，无缝衔接南挡墙端头)
   addRampApronCurb(73.31, -87.39, 6.62, 0.42);
-  // 西侧北段路缘 (z ∈ [-104.0, -94.9]，无缝衔接北挡墙端头)
-  addRampApronCurb(69.39, -99.45, 0.42, 9.10);
+  // 西侧北段路缘 (z ∈ [-103.50, -94.90]，精准衔接 FireRing 南路缘外沿，零侵占车行道)
+  addRampApronCurb(69.39, -99.20, 0.42, 8.60);
 
   // 2. 正向由东向西下沉车道坡板（东端顶面精准落于 y = +0.058 与引道严丝合缝，西端深入至 y = -3.106）
   const slopeThick = 0.24;
@@ -1437,14 +1437,17 @@ function sampleStreetlightsAlongRoad({
 }
 
 /**
- * 精工倒角停车场石材路缘框生成器（支持指定边开口预留进出车喉道，修复 R3）
+ * 精工倒角停车场石材路缘框生成器（支持单边或多边开口预留进出车喉道及人行通道）
  */
-function addChamferedLotCurbs(group, { cx, cz, w, d, topY = ROAD_Y.FIRE_CURB, curbMat, openGap = null }) {
+function addChamferedLotCurbs(group, { cx, cz, w, d, topY = ROAD_Y.FIRE_CURB, curbMat, openGap = null, openGaps = null }) {
   const t = 0.44;
   const botY = -0.06;
   const h = topY - botY;
   const yMid = botY + h * 0.5;
   const bevH = 0.032;
+
+  const gaps = openGaps ? [...openGaps] : openGap ? [openGap] : [];
+  const gapFor = (side) => gaps.find((g) => g.side === side) || null;
 
   // 带顶部倒角收边的单段路缘条
   const addCurbBar = (px, pz, pw, pd) => {
@@ -1469,9 +1472,10 @@ function addChamferedLotCurbs(group, { cx, cz, w, d, topY = ROAD_Y.FIRE_CURB, cu
   const zMax = cz + d * 0.5;
 
   // 北侧 (zMin)
-  if (openGap?.side === 'north') {
-    const g0 = openGap.min;
-    const g1 = openGap.max;
+  const northGap = gapFor('north');
+  if (northGap) {
+    const g0 = northGap.min;
+    const g1 = northGap.max;
     addCurbBar((xMin - t + g0) * 0.5, zMin - t * 0.5, g0 - (xMin - t), t);
     addCurbBar((g1 + xMax + t) * 0.5, zMin - t * 0.5, xMax + t - g1, t);
   } else {
@@ -1479,9 +1483,10 @@ function addChamferedLotCurbs(group, { cx, cz, w, d, topY = ROAD_Y.FIRE_CURB, cu
   }
 
   // 南侧 (zMax)
-  if (openGap?.side === 'south') {
-    const g0 = openGap.min;
-    const g1 = openGap.max;
+  const southGap = gapFor('south');
+  if (southGap) {
+    const g0 = southGap.min;
+    const g1 = southGap.max;
     addCurbBar((xMin - t + g0) * 0.5, zMax + t * 0.5, g0 - (xMin - t), t);
     addCurbBar((g1 + xMax + t) * 0.5, zMax + t * 0.5, xMax + t - g1, t);
   } else {
@@ -1489,9 +1494,10 @@ function addChamferedLotCurbs(group, { cx, cz, w, d, topY = ROAD_Y.FIRE_CURB, cu
   }
 
   // 西侧 (xMin)
-  if (openGap?.side === 'west') {
-    const g0 = openGap.min;
-    const g1 = openGap.max;
+  const westGap = gapFor('west');
+  if (westGap) {
+    const g0 = westGap.min;
+    const g1 = westGap.max;
     addCurbBar(xMin - t * 0.5, (zMin + g0) * 0.5, t, g0 - zMin);
     addCurbBar(xMin - t * 0.5, (g1 + zMax) * 0.5, t, zMax - g1);
   } else {
@@ -1499,14 +1505,530 @@ function addChamferedLotCurbs(group, { cx, cz, w, d, topY = ROAD_Y.FIRE_CURB, cu
   }
 
   // 东侧 (xMax)
-  if (openGap?.side === 'east') {
-    const g0 = openGap.min;
-    const g1 = openGap.max;
+  const eastGap = gapFor('east');
+  if (eastGap) {
+    const g0 = eastGap.min;
+    const g1 = eastGap.max;
     addCurbBar(xMax + t * 0.5, (zMin + g0) * 0.5, t, g0 - zMin);
     addCurbBar(xMax + t * 0.5, (g1 + zMax) * 0.5, t, zMax - g1);
   } else {
     addCurbBar(xMax + t * 0.5, cz, t, d);
   }
+}
+
+/**
+ * 建筑级圆角跑道形（Stadium / Rounded-Rect）倒角暖石种植岛（严格还原北迎宾大道南北双岛）
+ */
+function buildRoundedRectIsland({ cx, cz, width, length, radius, curbMat, turfMat }) {
+  const grp = new THREE.Group();
+  const makeRR = (w, l, r) => {
+    const hw = w * 0.5;
+    const hl = l * 0.5;
+    const rr = Math.min(r, hw - 0.05, hl - 0.05);
+    const s = new THREE.Shape();
+    s.moveTo(-hw + rr, -hl);
+    s.lineTo(hw - rr, -hl);
+    s.quadraticCurveTo(hw, -hl, hw, -hl + rr);
+    s.lineTo(hw, hl - rr);
+    s.quadraticCurveTo(hw, hl, hw - rr, hl);
+    s.lineTo(-hw + rr, hl);
+    s.quadraticCurveTo(-hw, hl, -hw, hl - rr);
+    s.lineTo(-hw, -hl + rr);
+    s.quadraticCurveTo(-hw, -hl, -hw + rr, -hl);
+    return s;
+  };
+
+  const curbGeo = new THREE.ExtrudeGeometry(makeRR(width, length, radius), {
+    depth: 0.21,
+    curveSegments: 10,
+    bevelEnabled: true,
+    bevelSegments: 1,
+    bevelSize: 0.035,
+    bevelThickness: 0.03,
+  });
+  curbGeo.rotateX(-Math.PI / 2);
+  const curbMesh = new THREE.Mesh(curbGeo, curbMat);
+  curbMesh.position.set(cx, -0.04, cz);
+  curbMesh.receiveShadow = true;
+  grp.add(curbMesh);
+
+  const turfGeo = new THREE.ExtrudeGeometry(makeRR(width - 0.62, length - 0.62, Math.max(0.2, radius - 0.31)), {
+    depth: 0.16,
+    curveSegments: 10,
+    bevelEnabled: true,
+    bevelSegments: 1,
+    bevelSize: 0.025,
+    bevelThickness: 0.02,
+  });
+  turfGeo.rotateX(-Math.PI / 2);
+  const turfMesh = new THREE.Mesh(turfGeo, turfMat);
+  turfMesh.position.set(cx, 0.06, cz);
+  turfMesh.receiveShadow = true;
+  grp.add(turfMesh);
+
+  return grp;
+}
+
+/**
+ * 市政主干道中央绿化分隔带生成器（严格对齐 KKAA 总平图中关村大道双向六车道分幅断面）
+ * - 在交叉口与园区西出入口自动断口封端，并于 d_out ∈ [18m, 30m] 平滑沉降消隐入路面
+ */
+function buildArterialMedianStrip({
+  controlPoints,
+  halfWidth = 0.90,
+  segments = 160,
+  roadTopY = ROAD_Y.ZGC,
+  curbTopY = ROAD_Y.ZGC_CURB + 0.085,
+  maxOutDist = 30,
+  suppressFn = null,
+  curbMat,
+  turfMat,
+}) {
+  const grp = new THREE.Group();
+  const vecs = controlPoints.map(([x, z]) => new THREE.Vector3(x, 0, z));
+  const curve = new THREE.CatmullRomCurve3(vecs, false, 'catmullrom', 0.32);
+  const pts = curve.getSpacedPoints(segments);
+  const count = pts.length;
+  const rights = [];
+  for (let i = 0; i < count; i++) {
+    const prev = pts[Math.max(0, i - 1)];
+    const next = pts[Math.min(count - 1, i + 1)];
+    const tan = new THREE.Vector3().subVectors(next, prev).normalize();
+    rights.push(new THREE.Vector3(-tan.z, 0, tan.x).normalize());
+  }
+
+  const activeSeg = new Array(count - 1).fill(true);
+  for (let i = 0; i < count - 1; i++) {
+    const mx = (pts[i].x + pts[i + 1].x) * 0.5;
+    const mz = (pts[i].z + pts[i + 1].z) * 0.5;
+    if (calcCampusOutDist(mx, mz) > maxOutDist || (suppressFn && suppressFn(mx, mz))) {
+      activeSeg[i] = false;
+    }
+  }
+
+  const runs = [];
+  let s = -1;
+  for (let i = 0; i < count - 1; i++) {
+    if (activeSeg[i] && s === -1) s = i;
+    if (!activeSeg[i] && s !== -1) {
+      runs.push([s, i]);
+      s = -1;
+    }
+  }
+  if (s !== -1) runs.push([s, count - 1]);
+
+  const buildStripMesh = (hw, topHeight, botY, mat) => {
+    const positions = [];
+    const indices = [];
+    const pCount = 6;
+    const baseBev = 0.03;
+
+    for (const [startIdx, endIdx] of runs) {
+      if (endIdx - startIdx < 2) continue;
+      const baseV = positions.length / 3;
+      const runLen = endIdx - startIdx + 1;
+
+      for (let i = startIdx; i <= endIdx; i++) {
+        const p = pts[i];
+        const r = rights[i];
+        const dOut = calcCampusOutDist(p.x, p.z);
+        const taper = smoothstep01(maxOutDist - 12.0, maxOutDist, dOut);
+        const localTop = topHeight * (1 - taper) + (roadTopY - 0.015) * taper;
+        const localBev = baseBev * (1 - taper);
+        const profile = [
+          [-hw, botY],
+          [-hw, localTop - localBev],
+          [-hw + localBev, localTop],
+          [hw - localBev, localTop],
+          [hw, localTop - localBev],
+          [hw, botY],
+        ];
+        for (let k = 0; k < pCount; k++) {
+          const [off, py] = profile[k];
+          positions.push(p.x + r.x * off, py, p.z + r.z * off);
+        }
+      }
+
+      for (let i = 0; i < runLen - 1; i++) {
+        const rowA = baseV + i * pCount;
+        const rowB = baseV + (i + 1) * pCount;
+        for (let k = 0; k < pCount - 1; k++) {
+          const a = rowA + k;
+          const b = rowA + k + 1;
+          const c = rowB + k;
+          const d = rowB + k + 1;
+          indices.push(a, b, c, b, d, c);
+        }
+      }
+
+      const sRow = baseV;
+      indices.push(
+        sRow, sRow + 2, sRow + 1,
+        sRow, sRow + 3, sRow + 2,
+        sRow, sRow + 4, sRow + 3,
+        sRow, sRow + 5, sRow + 4
+      );
+      const eRow = baseV + (runLen - 1) * pCount;
+      indices.push(
+        eRow, eRow + 1, eRow + 2,
+        eRow, eRow + 2, eRow + 3,
+        eRow, eRow + 3, eRow + 4,
+        eRow, eRow + 4, eRow + 5
+      );
+    }
+
+    if (positions.length === 0) return null;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.receiveShadow = true;
+    return mesh;
+  };
+
+  const curbMesh = buildStripMesh(halfWidth, curbTopY, roadTopY - 0.04, curbMat);
+  const turfMesh = buildStripMesh(halfWidth - 0.24, curbTopY + 0.03, roadTopY, turfMat);
+  if (curbMesh) grp.add(curbMesh);
+  if (turfMesh) grp.add(turfMesh);
+  return grp;
+}
+
+/**
+ * 2D 射线/直线交点：pA + t*dA = pB + u*dB
+ */
+function intersectLines2D(ax, az, dax, daz, bx, bz, dbx, dbz) {
+  const det = dax * dbz - daz * dbx;
+  if (Math.abs(det) < 1e-6) return [ax, az];
+  const dx = bx - ax;
+  const dz = bz - az;
+  const t = (dx * dbz - dz * dbx) / det;
+  return [ax + t * dax, az + t * daz];
+}
+
+/**
+ * 精工倒角弧形转角路缘返回段（沿二次贝塞尔转角无缝衔接交叉口两端直路缘）
+ */
+function buildCornerCurbReturnArc(p0, pCtrl, p1, { curbWidth = 0.42, topY = ROAD_Y.ZGC_CURB, botY = -0.06, mat, steps = 10 }) {
+  const pts = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const omt = 1 - t;
+    pts.push([
+      omt * omt * p0[0] + 2 * omt * t * pCtrl[0] + t * t * p1[0],
+      omt * omt * p0[1] + 2 * omt * t * pCtrl[1] + t * t * p1[1],
+    ]);
+  }
+
+  // 外侧方向指向控制点 pCtrl（草坪侧）
+  const mid = pts[Math.floor(steps * 0.5)];
+  const toCtrlX = pCtrl[0] - mid[0];
+  const toCtrlZ = pCtrl[1] - mid[1];
+
+  const positions = [];
+  const indices = [];
+  const pCount = 6;
+  const bev = 0.03;
+
+  for (let i = 0; i <= steps; i++) {
+    const prev = pts[Math.max(0, i - 1)];
+    const next = pts[Math.min(steps, i + 1)];
+    let tx = next[0] - prev[0];
+    let tz = next[1] - prev[1];
+    const tLen = Math.hypot(tx, tz) || 1;
+    tx /= tLen;
+    tz /= tLen;
+    // 单位法线指向草坪外侧（与 toCtrl 同向）
+    let nx = -tz;
+    let nz = tx;
+    if (nx * toCtrlX + nz * toCtrlZ < 0) {
+      nx = -nx;
+      nz = -nz;
+    }
+    const profile = [
+      [0, botY],
+      [0, topY - bev],
+      [bev, topY],
+      [curbWidth - bev, topY],
+      [curbWidth, topY - bev],
+      [curbWidth, botY],
+    ];
+    for (let k = 0; k < pCount; k++) {
+      const [off, py] = profile[k];
+      positions.push(pts[i][0] + nx * off, py, pts[i][1] + nz * off);
+    }
+  }
+
+  // 确保法线朝外：检查首段绕序
+  const t0x = pts[1][0] - pts[0][0];
+  const t0z = pts[1][1] - pts[0][1];
+  const nx0 = -t0z;
+  const nz0 = t0x;
+  const flip = nx0 * toCtrlX + nz0 * toCtrlZ < 0;
+
+  for (let i = 0; i < steps; i++) {
+    const rowA = i * pCount;
+    const rowB = (i + 1) * pCount;
+    for (let k = 0; k < pCount - 1; k++) {
+      const a = rowA + k;
+      const b = rowA + k + 1;
+      const c = rowB + k;
+      const d = rowB + k + 1;
+      if (!flip) indices.push(a, b, c, b, d, c);
+      else indices.push(a, c, b, b, c, d);
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+/**
+ * 市政十字 / T 型精细交叉口生成器（定向圆角切角沥青垫层 + 转角弧形路缘 + 4 方向斑马线与停车线！）
+ */
+function buildArterialIntersection({
+  cx,
+  cz,
+  dirA, // [ax, az] 单位向量（主干道 A）
+  halfWA,
+  roadTopYA,
+  dirB, // [bx, bz] 单位向量（交叉道路 B，T 型路口指向支路方向）
+  halfWB,
+  roadTopYB,
+  isTJunction = false,
+  filletR = 4.5,
+  topY = ROAD_Y.JUNCTION,
+  curbTopY = ROAD_Y.ZGC_CURB,
+  junctionMat,
+  curbMat,
+  markingMat,
+}) {
+  const grp = new THREE.Group();
+  const [ax, az] = dirA;
+  const [bx, bz] = dirB;
+  const nAx = -az;
+  const nAz = ax;
+  const nBx = -bz;
+  const nBz = bx;
+
+  // 辅助：放置垂直于给定道路方向的斑马线 + 白色实线停止线
+  const addApproachMarkings = (dx, dz, halfW, legDist, markTopY) => {
+    const rotY = Math.atan2(dx, dz);
+    const xwX = cx + dx * legDist;
+    const xwZ = cz + dz * legDist;
+    const stripes = Math.max(6, Math.round((halfW * 2 - 2.2) / 1.45));
+    grp.add(
+      buildCrosswalkStripes({
+        x: xwX,
+        z: xwZ,
+        width: halfW * 2 - 2.2,
+        length: 3.2,
+        stripes,
+        rotY,
+        topY: markTopY,
+        mat: markingMat,
+      })
+    );
+    // 停止线位于斑马线外侧 2.5m，仅覆盖右侧来车半幅车道
+    const stopDist = legDist + 2.55;
+    const rightX = -dz;
+    const rightZ = dx;
+    // 注意来车方向为 -dir，右侧车道偏向 +(-right) = (dz, -dx)
+    const laneCenterShift = halfW * 0.5;
+    const sx = cx + dx * stopDist + rightX * laneCenterShift;
+    const sz = cz + dz * stopDist + rightZ * laneCenterShift;
+    const stopBar = new THREE.Mesh(new THREE.BoxGeometry(halfW - 1.2, 0.006, 0.36), markingMat);
+    stopBar.position.set(sx, markTopY + 0.004, sz);
+    stopBar.rotation.y = rotY;
+    stopBar.receiveShadow = true;
+    grp.add(stopBar);
+  };
+
+  // 计算交叉口精确多边形轮廓（XZ 平面，shape Y = -Z）
+  const corners = [];
+  if (!isTJunction) {
+    // 4 个象限的精确路缘交点与转角圆弧切点
+    const quads = [
+      { sA: 1, sB: 1 },
+      { sA: -1, sB: 1 },
+      { sA: -1, sB: -1 },
+      { sA: 1, sB: -1 },
+    ];
+    const cornerData = quads.map(({ sA, sB }) => {
+      // 道路 A 的 sA 侧边线与道路 B 的 sB 侧边线交点
+      const cPt = intersectLines2D(
+        cx + nAx * sA * halfWA,
+        cz + nAz * sA * halfWA,
+        ax,
+        az,
+        cx + nBx * sB * halfWB,
+        cz + nBz * sB * halfWB,
+        bx,
+        bz
+      );
+      // 从中心到交点的投影决定沿 A/B 外伸方向
+      const vcx = cPt[0] - cx;
+      const vcz = cPt[1] - cz;
+      const signAlongA = vcx * ax + vcz * az >= 0 ? 1 : -1;
+      const signAlongB = vcx * bx + vcz * bz >= 0 ? 1 : -1;
+      const tA = [cPt[0] + signAlongA * ax * filletR, cPt[1] + signAlongA * az * filletR];
+      const tB = [cPt[0] + signAlongB * bx * filletR, cPt[1] + signAlongB * bz * filletR];
+      return { cPt, tA, tB, ang: Math.atan2(cPt[1] - cz, cPt[0] - cx) };
+    });
+
+    // 按围绕中心逆时针排序构成连续光滑圆角交叉口轮廓
+    cornerData.sort((u, v) => u.ang - v.ang);
+    const polyPts = [];
+    for (const cd of cornerData) {
+      // 判断 tA 和 tB 哪个角度更小，保证沿逆时针顺序连接
+      const angA = Math.atan2(cd.tA[1] - cz, cd.tA[0] - cx);
+      const angB = Math.atan2(cd.tB[1] - cz, cd.tB[0] - cx);
+      let dAng = angB - angA;
+      while (dAng > Math.PI) dAng -= Math.PI * 2;
+      while (dAng < -Math.PI) dAng += Math.PI * 2;
+      const first = dAng >= 0 ? cd.tA : cd.tB;
+      const second = dAng >= 0 ? cd.tB : cd.tA;
+
+      const arcSteps = 8;
+      for (let i = 0; i <= arcSteps; i++) {
+        const t = i / arcSteps;
+        const omt = 1 - t;
+        polyPts.push([
+          omt * omt * first[0] + 2 * omt * t * cd.cPt[0] + t * t * second[0],
+          omt * omt * first[1] + 2 * omt * t * cd.cPt[1] + t * t * second[1],
+        ]);
+      }
+
+      // 弧形转角倒角暖石路缘
+      grp.add(
+        buildCornerCurbReturnArc(first, cd.cPt, second, {
+          curbWidth: 0.42,
+          topY: curbTopY,
+          mat: curbMat,
+          steps: 10,
+        })
+      );
+      corners.push(cd);
+    }
+
+    // 挤压交叉口实心深石板沥青垫层
+    const shape = new THREE.Shape();
+    shape.moveTo(polyPts[0][0], -polyPts[0][1]);
+    for (let i = 1; i < polyPts.length; i++) {
+      shape.lineTo(polyPts[i][0], -polyPts[i][1]);
+    }
+    shape.closePath();
+    const padH = topY + 0.06;
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: padH, bevelEnabled: false });
+    geo.rotateX(-Math.PI / 2);
+    const padMesh = new THREE.Mesh(geo, junctionMat);
+    padMesh.position.y = topY - padH;
+    padMesh.receiveShadow = true;
+    grp.add(padMesh);
+
+    // 计算四方向斑马线安全退距（严格落在圆角垫层之外，零 Z-Fighting）
+    let maxProjA = 0;
+    let maxProjB = 0;
+    for (const pt of polyPts) {
+      const px = pt[0] - cx;
+      const pz = pt[1] - cz;
+      maxProjA = Math.max(maxProjA, Math.abs(px * ax + pz * az));
+      maxProjB = Math.max(maxProjB, Math.abs(px * bx + pz * bz));
+    }
+    addApproachMarkings(ax, az, halfWA, maxProjA + 2.3, roadTopYA);
+    addApproachMarkings(-ax, -az, halfWA, maxProjA + 2.3, roadTopYA);
+    addApproachMarkings(bx, bz, halfWB, maxProjB + 2.3, roadTopYB);
+    addApproachMarkings(-bx, -bz, halfWB, maxProjB + 2.3, roadTopYB);
+  } else {
+    // T 型路口（如平陵西路 × 北迎宾大道）：主干道北缘完全齐平零外凸，南侧双角优雅圆弧展宽
+    // 确定哪一侧法线 nA 指向支路 dirB（南侧）
+    const southSign = nAx * bx + nAz * bz >= 0 ? 1 : -1;
+    const sNx = nAx * southSign;
+    const sNz = nAz * southSign;
+
+    // 支路西/东边线与主干道南边线的 2 个转角交点
+    const c1 = intersectLines2D(
+      cx + sNx * halfWA,
+      cz + sNz * halfWA,
+      ax,
+      az,
+      cx + nBx * halfWB,
+      cz + nBz * halfWB,
+      bx,
+      bz
+    );
+    const c2 = intersectLines2D(
+      cx + sNx * halfWA,
+      cz + sNz * halfWA,
+      ax,
+      az,
+      cx - nBx * halfWB,
+      cz - nBz * halfWB,
+      bx,
+      bz
+    );
+
+    const buildTCorner = (cPt) => {
+      const vcx = cPt[0] - cx;
+      const vcz = cPt[1] - cz;
+      const signAlongA = vcx * ax + vcz * az >= 0 ? 1 : -1;
+      const tA = [cPt[0] + signAlongA * ax * filletR, cPt[1] + signAlongA * az * filletR];
+      const tB = [cPt[0] + bx * filletR, cPt[1] + bz * filletR];
+      return { cPt, tA, tB, signAlongA };
+    };
+    const tc1 = buildTCorner(c1);
+    const tc2 = buildTCorner(c2);
+    const leftC = tc1.signAlongA < 0 ? tc1 : tc2;
+    const rightC = tc1.signAlongA < 0 ? tc2 : tc1;
+
+    // 主干道北缘两角与左右 tA 对齐投影到主干道北边线（零外凸！）
+    const projToNorth = (pt) => {
+      const along = (pt[0] - cx) * ax + (pt[1] - cz) * az;
+      return [cx + ax * along - sNx * halfWA, cz + az * along - sNz * halfWA];
+    };
+    const nLeft = projToNorth(leftC.tA);
+    const nRight = projToNorth(rightC.tA);
+
+    const polyPts = [nLeft, nRight];
+    const pushQuad = (p0, pc, p1) => {
+      for (let i = 0; i <= 8; i++) {
+        const t = i / 8;
+        const omt = 1 - t;
+        polyPts.push([
+          omt * omt * p0[0] + 2 * omt * t * pc[0] + t * t * p1[0],
+          omt * omt * p0[1] + 2 * omt * t * pc[1] + t * t * p1[1],
+        ]);
+      }
+    };
+    pushQuad(rightC.tA, rightC.cPt, rightC.tB);
+    pushQuad(leftC.tB, leftC.cPt, leftC.tA);
+
+    const shape = new THREE.Shape();
+    shape.moveTo(polyPts[0][0], -polyPts[0][1]);
+    for (let i = 1; i < polyPts.length; i++) {
+      shape.lineTo(polyPts[i][0], -polyPts[i][1]);
+    }
+    shape.closePath();
+    const padH = topY + 0.06;
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: padH, bevelEnabled: false });
+    geo.rotateX(-Math.PI / 2);
+    const padMesh = new THREE.Mesh(geo, junctionMat);
+    padMesh.position.y = topY - padH;
+    padMesh.receiveShadow = true;
+    grp.add(padMesh);
+
+    grp.add(
+      buildCornerCurbReturnArc(leftC.tA, leftC.cPt, leftC.tB, { curbWidth: 0.42, topY: curbTopY, mat: curbMat, steps: 10 }),
+      buildCornerCurbReturnArc(rightC.tA, rightC.cPt, rightC.tB, { curbWidth: 0.42, topY: curbTopY, mat: curbMat, steps: 10 })
+    );
+  }
+
+  return grp;
 }
 
 /**
@@ -1630,7 +2152,9 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
     roughness: 0.4,
   });
 
-  // 共享各主干道与内部环道样条控制点（核心点保留原位供 64 盏路灯与动态车流精确对齐，外围主干道沿切线无界延展 ~220m）
+  const islandTurfMat = new THREE.MeshStandardMaterial({ color: '#36662d', roughness: 0.85, metalness: 0.0 });
+
+  // 共享各主干道与内部环道样条控制点（与 HardwarePlinth.js / VegetationSystem.js / VehicleTrafficSystem.js 严格 1:1 同步）
   const zhongguancunPts = [
     [-208, -184],
     [-211, -92],
@@ -1660,22 +2184,24 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
     [272, -208],
     [379, -232],
   ];
+  // 永平大道：沿 26.2° 顺直贯穿中关村大道交叉口，彻底消除原交叉口 8.5° 生硬折弯
   const yongpingPts = [
-    [-243, 114],
-    [-221, 122],
-    [-186, 138],
-    [-138, 164],
-    [-94, 184],
+    [-243, 111.3],
+    [-221.6, 121.8],
+    [-186, 139.3],
+    [-138, 162.9],
+    [-94, 184.6],
   ];
   const yongpingExtendedPts = [
-    [-450, 39],
-    [-346, 76],
+    [-450, 9.4],
+    [-346, 60.6],
     ...yongpingPts,
-    [6, 230],
-    [106, 275],
+    [6, 233.8],
+    [106, 283.0],
+    [206, 332.2],
   ];
   const fireRingPts = [
-    [-210, -66],
+    [-212.1, -66],
     [-174, -84],
     [-130, -98],
     [-58, -106],
@@ -1683,20 +2209,47 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
     [96, -104],
     [98, -64],
     [97, -12],
-    [96, 24],
+    [96, 17.5],
   ];
   const westBranchPts = [
-    [-214, 22],
+    [-216.2, 22],
     [-168, 22],
     [-146, 18],
     [-146, -34],
     [-144, -94.9],
   ];
 
-  // 交叉口、广场、引道与装卸区路缘抑止判据（彻底修复 R4：零路缘横切任何行车道！）
+  // 交叉口精确中心与单位方向向量（与转角路缘返回弧及斑马线精准咬合）
+  const jPlZgc = { x: -210.5, z: -106.4 };
+  const jYpZgc = { x: -221.6, z: 121.8 };
+  const jNorthGate = { x: 26.0, z: -154.1 };
+
+  const norm2 = (x, z) => {
+    const l = Math.hypot(x, z) || 1;
+    return [x / l, z / l];
+  };
+  const dirZgcN = norm2(-3, 92); // [-0.0326, 0.9995]
+  const dirZgcS = norm2(-5, 95); // [-0.0526, 0.9986]
+  const dirPingW = norm2(113, -24); // [0.9782, -0.2078]
+  const dirPingN = norm2(90, -18); // [0.9806, -0.1961]
+  const dirYong = norm2(1.0, 0.492); // [0.8973, 0.4415]
+
+  // 精确交叉口投影盒判据：让主干道直路缘恰好止于转角圆弧切点（零断隙、零重叠！）
+  const inFourWayBox = (x, z, jc, dA, hwA, dB, hwB, filletR) => {
+    const dx = x - jc.x;
+    const dz = z - jc.z;
+    const sinT = Math.max(0.35, Math.abs(dA[0] * dB[1] - dA[1] * dB[0]));
+    const cosT = Math.abs(dA[0] * dB[0] + dA[1] * dB[1]);
+    const limA = (hwB + hwA * cosT) / sinT + filletR + 0.15;
+    const limB = (hwA + hwB * cosT) / sinT + filletR + 0.15;
+    const projA = Math.abs(dx * dA[0] + dz * dA[1]);
+    const projB = Math.abs(dx * dB[0] + dz * dB[1]);
+    return projA < limA && projB < limB;
+  };
+
   const inArterialJunction = (x, z) =>
-    Math.hypot(x + 211, z + 106) < 13.4 ||
-    Math.hypot(x + 221, z - 122) < 13.2;
+    inFourWayBox(x, z, jPlZgc, dirZgcN, 9.8, dirPingW, 7.75, 4.6) ||
+    inFourWayBox(x, z, jYpZgc, dirZgcS, 9.8, dirYong, 7.5, 4.6);
 
   const zgcSuppress = (x, z) =>
     inArterialJunction(x, z) ||
@@ -1704,52 +2257,65 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
     (x > -211.0 && z > -72.0 && z < -60.0) ||
     (x > -215.0 && z > 16.5 && z < 27.5);
 
+  const zgcMedianSuppress = (x, z) =>
+    Math.hypot(x - jPlZgc.x, z - jPlZgc.z) < 20.5 ||
+    Math.hypot(x - jYpZgc.x, z - jYpZgc.z) < 20.5 ||
+    (z > -76.0 && z < -56.0) ||
+    (z > 12.0 && z < 32.0);
+
   const pinglingSuppress = (x, z) =>
     inArterialJunction(x, z) ||
-    // 北迎宾大道 T 型交叉口：仅打开平陵西路南侧路缘，保持北侧连续！
-    (z > -156.5 && Math.hypot(x - 26, z + 153.5) < 13.4) ||
-    // 环湖步道东端接入平陵西路南侧口
-    (x > 67.5 && x < 76.5 && z > -165.5 && z < -156.5);
+    // 北迎宾大道 T 型交叉口：仅打开平陵西路南侧路缘至圆弧切点，保持北侧路缘 100% 连续！
+    (z > -154.5 && Math.abs(x - jNorthGate.x) < 14.8 && z < -141.0) ||
+    // 环湖步道东端接入平陵西路南侧路缘精准开口（原 [-165.5,-156.5] 漏开 -155.6 南路缘，现根治！）
+    (x > 69.0 && x < 76.0 && z > -158.0 && z < -153.0);
 
   const yongpingSuppress = (x, z) => inArterialJunction(x, z);
 
   const welcomeSuppress = (x, z) =>
-    Math.hypot(x - 26, z + 153.5) < 13.4 ||
-    // 迎宾广场与消防环道交汇区（z >= -111.5 起开放衔接广场与环道）
-    z > -111.5;
+    // 顶部平陵西路 T 型圆弧转角区（z <= -139.8）
+    z < -139.8 ||
+    // 迎宾十字路口与广场贯通区（z >= -111.8 起开放衔接消防环道与迎宾广场）
+    z > -111.8;
 
   const fireRingSuppress = (x, z) =>
-    // 西端接入中关村大道
+    // 西端接入中关村大道（匹配 19.6m 宽主干道东缘 x ≈ -202.0）
     x < -200.5 ||
     // 环湖步道西北入口 [-177, -81.5] 南侧路缘开口
     (x > -181.0 && x < -173.0 && z > -83.5 && z < -77.5) ||
     // 西翼支线 T 型汇入 (-144, -94.9) 南侧路缘开口
     (z > -96.5 && Math.hypot(x + 144, z + 94.9) < 7.6) ||
-    // 北迎宾大道与回转广场贯通区
+    // 北迎宾大道十字交叉口与回转广场贯通区
     (x > 7.2 && x < 44.8 && z < -80.0 && z > -112.5) ||
     // 1BF 地下车库引道南侧入口开口 (精准匹配修剪后 x ∈ [69.2, 76.6] 引道宽)
     (x > 68.8 && x < 76.9 && z > -106.0 && z < -98.0) ||
     // 东北停车场南侧入口开口 (x ∈ [84.5, 94.5])
     (x > 84.2 && x < 94.8 && z < -105.5 && z > -111.5) ||
     // 东侧装卸区西侧加宽开口
-    (x < 97.4 && z > -16.8 && z < 8.8);
+    (x < 97.4 && z > -16.8 && z < 8.8) ||
+    // 东侧门洞掉头广场衔接区（杜绝与东栈桥着陆踏步穿模！）
+    (x > 90.0 && z > 16.0);
 
   const westBranchSuppress = (x, z) =>
-    // 西端接入中关村大道
-    x < -204.5 ||
+    // 西端接入中关村大道（匹配 19.6m 宽主干道东缘 x ≈ -206.4）
+    x < -204.0 ||
+    // 根治缺陷：西翼支线与环湖西北步道 WalkwayNW 在 (-184.0, 22.0) 十字平交开口！
+    Math.hypot(x + 184.0, z - 22.0) < 3.6 ||
+    // 西翼建筑入口人行步道东向衔接开口 (x > -145, z ∈ [19.8, 25.2])
+    (x > -145.5 && z > 19.8 && z < 25.2) ||
     // 北端接入消防环道
     (z < -89.5 && Math.hypot(x + 144, z + 94.9) < 7.6) ||
     // 西侧停车场入口引道东侧开口 (z ∈ [-14.8, -5.2])
     (x > -145.0 && z > -15.0 && z < -5.0);
 
-  // 1. 西侧市政主干道：中关村大道（无界延展至南北云雾边界，核心段不透明实心，路缘 d_out <= 32m 平滑收尾）
+  // 1. 西侧市政主干道：中关村大道（19.6m 双向六车道 + 中央绿化分隔带，无界延展至南北云雾边界）
   group.add(
     buildExtrudedRoadRibbon({
       controlPoints: zhongguancunExtendedPts,
-      width: 17.5,
+      width: 19.6,
       topY: ROAD_Y.ZGC,
       curbTopY: ROAD_Y.ZGC_CURB,
-      segments: 140,
+      segments: 148,
       uvTileLength: 20,
       roadMaterial: arterialMat,
       fadeRoadMaterial: arterialFadeMat,
@@ -1759,15 +2325,28 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
       curbSuppressFn: zgcSuppress,
     })
   );
+  group.add(
+    buildArterialMedianStrip({
+      controlPoints: zhongguancunExtendedPts,
+      halfWidth: 0.90,
+      segments: 160,
+      roadTopY: ROAD_Y.ZGC,
+      curbTopY: ROAD_Y.ZGC_CURB + 0.085,
+      maxOutDist: 30,
+      suppressFn: zgcMedianSuppress,
+      curbMat,
+      turfMat: islandTurfMat,
+    })
+  );
 
-  // 2. 北侧市政主干道：平陵西路（无界延展至东西云雾边界）
+  // 2. 北侧市政主干道：平陵西路（15.5m 双向四车道，无界延展至东西云雾边界）
   group.add(
     buildExtrudedRoadRibbon({
       controlPoints: pinglingExtendedPts,
       width: 15.5,
       topY: ROAD_Y.PINGLING,
       curbTopY: ROAD_Y.PINGLING_CURB,
-      segments: 140,
+      segments: 144,
       uvTileLength: 20,
       roadMaterial: arterialMat,
       fadeRoadMaterial: arterialFadeMat,
@@ -1778,14 +2357,14 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
     })
   );
 
-  // 3. 西南市政主干道：永平大道（无界延展至西南与东南云雾边界）
+  // 3. 西南市政主干道：永平大道（15.0m 双向四车道，顺直无界延展至西南与东南云雾边界）
   group.add(
     buildExtrudedRoadRibbon({
       controlPoints: yongpingExtendedPts,
       width: 15.0,
       topY: ROAD_Y.YONGPING,
       curbTopY: ROAD_Y.YONGPING_CURB,
-      segments: 128,
+      segments: 144,
       uvTileLength: 20,
       roadMaterial: arterialMat,
       fadeRoadMaterial: arterialFadeMat,
@@ -1796,35 +2375,77 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
     })
   );
 
-  // 市政交叉路口平滑圆角深石板沥青垫层（y = 0.076，与各主干道错开 >= 4mm 杜绝闪烁）
-  const junctions = [
-    { x: -211, z: -106, r: 12.2 },
-    { x: -221, z: 122, r: 11.8 },
-    { x: 26, z: -153.2, r: 8.6 }, // T型路口贴合平陵西路北缘，不探出北侧路缘
-  ];
-  for (const j of junctions) {
-    const padH = ROAD_Y.JUNCTION + 0.06;
-    const pad = new THREE.Mesh(
-      new THREE.CylinderGeometry(j.r, j.r + 0.18, padH, 28),
-      junctionMat
-    );
-    pad.position.set(j.x, ROAD_Y.JUNCTION - padH * 0.5, j.z);
-    pad.receiveShadow = true;
-    group.add(pad);
-  }
+  // 市政精准定向交叉口（圆角切角沥青垫层 + 转角弧形路缘 + 斑马线与停止线，彻底告别粗放圆盘！）
+  group.add(
+    buildArterialIntersection({
+      cx: jPlZgc.x,
+      cz: jPlZgc.z,
+      dirA: dirZgcN,
+      halfWA: 9.8,
+      roadTopYA: ROAD_Y.ZGC,
+      dirB: dirPingW,
+      halfWB: 7.75,
+      roadTopYB: ROAD_Y.PINGLING,
+      isTJunction: false,
+      filletR: 4.6,
+      topY: ROAD_Y.JUNCTION,
+      curbTopY: ROAD_Y.ZGC_CURB,
+      junctionMat,
+      curbMat,
+      markingMat: crosswalkMat,
+    })
+  );
+  group.add(
+    buildArterialIntersection({
+      cx: jYpZgc.x,
+      cz: jYpZgc.z,
+      dirA: dirZgcS,
+      halfWA: 9.8,
+      roadTopYA: ROAD_Y.ZGC,
+      dirB: dirYong,
+      halfWB: 7.5,
+      roadTopYB: ROAD_Y.YONGPING,
+      isTJunction: false,
+      filletR: 4.6,
+      topY: ROAD_Y.JUNCTION,
+      curbTopY: ROAD_Y.ZGC_CURB,
+      junctionMat,
+      curbMat,
+      markingMat: crosswalkMat,
+    })
+  );
+  group.add(
+    buildArterialIntersection({
+      cx: jNorthGate.x,
+      cz: jNorthGate.z,
+      dirA: dirPingN,
+      halfWA: 7.75,
+      roadTopYA: ROAD_Y.PINGLING,
+      dirB: [0, 1],
+      halfWB: 8.4,
+      roadTopYB: ROAD_Y.WELCOME,
+      isTJunction: true,
+      filletR: 4.8,
+      topY: ROAD_Y.JUNCTION,
+      curbTopY: ROAD_Y.PINGLING_CURB,
+      junctionMat,
+      curbMat,
+      markingMat: crosswalkMat,
+    })
+  );
 
-  // 4. 北侧迎宾大道与回转广场（严丝合缝对接平陵西路与 32m 中央门廊）
+  // 4. 北侧迎宾大道、南北分幅种植岛与开敞四向消防环道十字路口（100% 对齐 IOPLY 航拍实景与 KKAA 一层总图！）
   group.add(
     buildExtrudedRoadRibbon({
       controlPoints: [
-        [26, -153.5],
+        [26, -154.1],
         [26, -124],
-        [26, -105.5],
+        [26, -104.2],
       ],
       width: 16.8,
       topY: ROAD_Y.WELCOME,
       curbTopY: ROAD_Y.WELCOME_CURB,
-      segments: 24,
+      segments: 28,
       uvTileLength: 14,
       roadMaterial: plazaMat,
       curbMaterial: curbMat,
@@ -1832,11 +2453,11 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
     })
   );
 
-  // 迎宾大道精工斑马线（北端平陵路口南侧 & 中央种植岛北端）
+  // 迎宾大道北口人行横道（位于平陵路口南侧、北中分岛北端之间，零压岛！）
   group.add(
     buildCrosswalkStripes({
       x: 26,
-      z: -141.0,
+      z: -142.2,
       width: 14.6,
       length: 3.0,
       stripes: 8,
@@ -1844,41 +2465,54 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
       mat: crosswalkMat,
     })
   );
+
+  // 中央大入口迎宾广场（z ∈ [-104.6, -81.0]，紧贴北侧消防环道南边线，零遮挡消防环道！）
+  const plazaH = ROAD_Y.PLAZA + 0.06;
+  const plazaBox = new THREE.Mesh(new THREE.BoxGeometry(36.0, plazaH, 23.6), plazaMat);
+  plazaBox.position.set(26, ROAD_Y.PLAZA - plazaH * 0.5, -92.8);
+  plazaBox.receiveShadow = true;
+  group.add(plazaBox);
+
+  // 中央 32m 大门廊北前区人行礼仪过街标线（呼应 IOPLY 园区鸟瞰实景入口石材纹带）
   group.add(
     buildCrosswalkStripes({
       x: 26,
-      z: -124.8,
-      width: 14.6,
-      length: 2.8,
+      z: -84.2,
+      width: 15.2,
+      length: 2.6,
       stripes: 8,
-      topY: ROAD_Y.WELCOME,
+      topY: ROAD_Y.PLAZA,
       mat: crosswalkMat,
     })
   );
 
-  const plazaH = ROAD_Y.PLAZA + 0.06;
-  const plazaBox = new THREE.Mesh(new THREE.BoxGeometry(36.0, plazaH, 26.0), plazaMat);
-  plazaBox.position.set(26, ROAD_Y.PLAZA - plazaH * 0.5, -94);
-  plazaBox.receiveShadow = true;
-  group.add(plazaBox);
-
-  // 中央精工倒角暖石种植岛（健康翠绿草坪，与 @env-clouds #38 无缝对齐）
-  const islandCurb = new THREE.Mesh(new THREE.CylinderGeometry(3.26, 3.44, 0.22, 28), curbMat);
-  islandCurb.scale.set(1.0, 1, 2.72);
-  islandCurb.position.set(26, 0.11, -112);
-  islandCurb.receiveShadow = true;
-  group.add(islandCurb);
-
-  const islandTurf = new THREE.Mesh(
-    new THREE.CylinderGeometry(2.86, 2.94, 0.25, 28),
-    new THREE.MeshStandardMaterial({ color: '#36662d', roughness: 0.85, metalness: 0.0 })
+  // 北中分绿化岛（z ∈ [-138.4, -115.0]，清晰让出 z = -108 消防环道十字交叉口！）
+  group.add(
+    buildRoundedRectIsland({
+      cx: 26,
+      cz: -126.7,
+      width: 4.2,
+      length: 23.4,
+      radius: 2.0,
+      curbMat,
+      turfMat: islandTurfMat,
+    })
   );
-  islandTurf.scale.set(1.0, 1, 2.62);
-  islandTurf.position.set(26, 0.125, -112);
-  islandTurf.receiveShadow = true;
-  group.add(islandTurf);
 
-  // 5. 环绕建筑内部消防车道与装卸区
+  // 南落客回转绿化岛（z ∈ [-101.6, -92.6]，还原 Eiichi Kano 07 与航拍实景中的门廊前圆角草坪落客岛！）
+  group.add(
+    buildRoundedRectIsland({
+      cx: 26,
+      cz: -97.1,
+      width: 4.6,
+      length: 9.0,
+      radius: 2.2,
+      curbMat,
+      turfMat: islandTurfMat,
+    })
+  );
+
+  // 5. 环绕建筑内部消防车道、西翼支线、东门洞掉头广场与装卸区
   group.add(
     buildExtrudedRoadRibbon({
       controlPoints: fireRingPts,
@@ -1890,6 +2524,76 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
       roadMaterial: fireRoadMat,
       curbMaterial: curbMat,
       curbSuppressFn: fireRingSuppress,
+    })
+  );
+
+  // 东侧门洞圆形掉头广场 + 无缝东栈桥 / 东门洞步行衔接（彻底消除原 [96,24] 钝端截断与路缘穿东栈桥！）
+  const eastTurnX = 96.0;
+  const eastTurnZ = 21.8;
+  const eastTurnR = 5.0;
+  const eastTurnTopY = ROAD_Y.BRANCH_APRON; // 0.058，与 FireRing 0.062 错开 4mm 零闪烁
+  const eastTurnH = eastTurnTopY + 0.06;
+  const eastTurnNeck = new THREE.Mesh(new THREE.BoxGeometry(6.8, eastTurnH, 5.2), fireRoadMat);
+  eastTurnNeck.position.set(eastTurnX, eastTurnTopY - eastTurnH * 0.5, 19.2);
+  eastTurnNeck.receiveShadow = true;
+  group.add(eastTurnNeck);
+
+  const eastTurnBulb = new THREE.Mesh(
+    new THREE.CylinderGeometry(eastTurnR, eastTurnR + 0.14, eastTurnH, 28),
+    lotPatchMat
+  );
+  eastTurnBulb.position.set(eastTurnX, eastTurnTopY - eastTurnH * 0.5, eastTurnZ);
+  eastTurnBulb.receiveShadow = true;
+  group.add(eastTurnBulb);
+
+  // 东掉头广场暖石弧形外路缘（仅封合南/西南段，东侧留口平顺衔接东栈桥，西侧留口直通东门洞！）
+  const addTurnaroundCurbArc = (aStart, aEnd, steps = 12) => {
+    const pStart = [eastTurnX + Math.cos(aStart) * eastTurnR, eastTurnZ + Math.sin(aStart) * eastTurnR];
+    const pEnd = [eastTurnX + Math.cos(aEnd) * eastTurnR, eastTurnZ + Math.sin(aEnd) * eastTurnR];
+    const aMid = (aStart + aEnd) * 0.5;
+    const ctrlR = eastTurnR / Math.cos((aEnd - aStart) * 0.5);
+    const pCtrl = [eastTurnX + Math.cos(aMid) * ctrlR, eastTurnZ + Math.sin(aMid) * ctrlR];
+    group.add(
+      buildCornerCurbReturnArc(pStart, pCtrl, pEnd, {
+        curbWidth: 0.42,
+        topY: ROAD_Y.FIRE_CURB,
+        mat: curbMat,
+        steps,
+      })
+    );
+  };
+  // 南弧段（+44° 到 +132°，避让东栈桥着陆口与西侧东门洞步道口）
+  addTurnaroundCurbArc(0.76, 2.30, 14);
+  // 东门洞衔接暖洞石步行平台（x ∈ [85.6, 91.6], z ∈ [20.4, 24.6]，无缝连接掉头广场西口与 EastPortal！）
+  const eastPortalWalkH = ROAD_Y.WALKWAY + 0.06;
+  const eastPortalWalk = new THREE.Mesh(new THREE.BoxGeometry(6.0, eastPortalWalkH, 4.2), pathMat);
+  eastPortalWalk.position.set(88.6, ROAD_Y.WALKWAY - eastPortalWalkH * 0.5, 22.5);
+  eastPortalWalk.receiveShadow = true;
+  group.add(eastPortalWalk);
+
+  // 西翼消防环道 / 西翼支线接入中关村大道东口人行横道
+  group.add(
+    buildCrosswalkStripes({
+      x: -199.8,
+      z: -71.2,
+      width: 5.8,
+      length: 2.6,
+      stripes: 5,
+      rotY: Math.atan2(36, -18),
+      topY: ROAD_Y.FIRE_LOT,
+      mat: crosswalkMat,
+    })
+  );
+  group.add(
+    buildCrosswalkStripes({
+      x: -202.8,
+      z: 22.0,
+      width: 5.2,
+      length: 2.6,
+      stripes: 4,
+      rotY: Math.PI / 2,
+      topY: ROAD_Y.BRANCH_APRON,
+      mat: crosswalkMat,
     })
   );
 
@@ -1905,6 +2609,20 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
       roadMaterial: campusRoadMat,
       curbMaterial: curbMat,
       curbSuppressFn: westBranchSuppress,
+    })
+  );
+
+  // 西翼支线 × 环湖西北步道 (-184.0, 22.0) 十字平交斑马线（彻底消除双路缘互相切割车行道！）
+  group.add(
+    buildCrosswalkStripes({
+      x: -184.0,
+      z: 22.0,
+      width: 5.2,
+      length: 3.2,
+      stripes: 4,
+      rotY: Math.PI / 2,
+      topY: ROAD_Y.BRANCH_APRON,
+      mat: crosswalkMat,
     })
   );
 
@@ -1957,11 +2675,13 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
   loadingBay.receiveShadow = true;
   group.add(loadingBay);
 
-  // 6. 环湖暖洞石慢行绿道（修复 R2：西北段起点延至 [-177,-81.5] 严丝合缝接消防环道；东段绕行东岸六角亭外缘 [160.5,-24], [154,-76]！）
+  // 6. 环湖暖洞石慢行绿道 + 西翼门洞步行廊道（对接 KKAA 一层总图 W1-W2 / W2-W3 底层架空入口门洞！）
   const walkwaySuppress = (x, z) =>
     // 避让西北接入消防环道与东端接入平陵西路的接缝端头
     Math.hypot(x + 177, z + 81.5) < 4.5 ||
-    Math.hypot(x - 72, z + 160) < 5.0 ||
+    Math.hypot(x - 72.5, z + 155.8) < 4.2 ||
+    // 根治缺陷：避让 WalkwayNW 与 WestBranch 在 (-184.0, 22.0) 十字平交车行道！
+    Math.hypot(x + 184.0, z - 22.0) < 5.0 ||
     // 避让东侧亲水栈桥东端着陆点 (154.4, 2.4) 西侧路缘，无缝上桥
     (x < 156.2 && Math.hypot(x - 155.2, z - 2.2) < 4.2);
 
@@ -2001,11 +2721,11 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
         [168, 74],
         [172, 34],
         [156, 2], // 保持不变，严丝合缝对接东岸亲水栈桥 (154.4, 2.4)！
-        [160.5, -24], // 修复 R2：优雅绕行东岸六角亭 (146,-24, r=11.6) 外缘，零穿插！
-        [154, -76], // 修复 R2：顺滑北延
+        [160.5, -24], // 优雅绕行东岸六角亭 (146,-24, r=11.6) 外缘，零穿插！
+        [154, -76],
         [136, -132],
         [98, -142],
-        [72, -160], // 顺畅接入平陵西路！
+        [72.5, -155.8], // 精准齐平止于平陵西路南缘（彻底消除探入机动车道 4m！）
       ],
       width: 3.6,
       topY: ROAD_Y.WALKWAY,
@@ -2019,6 +2739,51 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
     })
   );
 
+  // 西翼入口步行连廊（连通西翼支线、西侧停车场南口、W1-W2 门洞与 W2-W3 门洞，还原 KKAA 一层总图步行流线）
+  const westPorchSuppress = (x, z) =>
+    Math.hypot(x + 130.0, z - 22.5) < 2.6 ||
+    x < -141.0 ||
+    x > -81.2 ||
+    z < 13.0 ||
+    z > 29.2;
+
+  group.add(
+    buildExtrudedRoadRibbon({
+      controlPoints: [
+        [-143.0, 22.5],
+        [-112.0, 22.5],
+        [-80.0, 22.5],
+      ],
+      width: 3.2,
+      topY: ROAD_Y.WALKWAY,
+      curbTopY: ROAD_Y.WALKWAY_CURB,
+      curbWidth: 0.22,
+      segments: 24,
+      uvTileLength: 8,
+      roadMaterial: pathMat,
+      curbMaterial: curbMat,
+      curbSuppressFn: westPorchSuppress,
+    })
+  );
+  group.add(
+    buildExtrudedRoadRibbon({
+      controlPoints: [
+        [-130.0, 12.2],
+        [-130.0, 22.5],
+        [-130.0, 30.2],
+      ],
+      width: 3.2,
+      topY: ROAD_Y.WALKWAY - 0.004,
+      curbTopY: ROAD_Y.WALKWAY_CURB,
+      curbWidth: 0.22,
+      segments: 16,
+      uvTileLength: 8,
+      roadMaterial: pathMat,
+      curbMaterial: curbMat,
+      curbSuppressFn: westPorchSuppress,
+    })
+  );
+
   // 7. 西侧与东北侧地面停车场（修复 R3 入口断口 + 修复 R7 车棚与泊位彻底零碰撞 + 混凝土轮挡 + 门岗道闸！）
   const westParkTex = createParkingLotTexture(2, 9, 6, maxAnisotropy);
   const westParkMat = new THREE.MeshStandardMaterial({ map: westParkTex, roughness: 0.76, metalness: 0.04 });
@@ -2028,14 +2793,17 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
   westLot.receiveShadow = true;
   group.add(westLot);
 
-  // 西停车场四面完整倒角暖石路缘（仅西侧 z ∈ [-14.5, -5.5] 留出 9m 入口喉道）
+  // 西停车场四面完整倒角暖石路缘（西侧 z ∈ [-14.5, -5.5] 留出 9m 车行入口 + 南侧 x ∈ [-131.8, -128.2] 留出 3.6m 人行门洞通道）
   addChamferedLotCurbs(group, {
     cx: -120.0,
     cz: -10.0,
     w: 34.0,
     d: 44.0,
     curbMat,
-    openGap: { side: 'west', min: -14.5, max: -5.5 },
+    openGaps: [
+      { side: 'west', min: -14.5, max: -5.5 },
+      { side: 'south', min: -131.8, max: -128.2 },
+    ],
   });
 
   // 西停车场双联太阳能 EV 充电车棚（北翼 [-30.2, -16.8] & 南翼 [-3.2, +10.2]，精准对齐车位分界线并让出完整入口喉道！）
@@ -2168,14 +2936,16 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
   });
   group.add(garageRamp.group);
 
-  // 9. 全园区工业设计级 CNC 道路路灯系统（100% 修复 R6：基座下探至 -0.04m 绝无悬空！）
+  // 9. 全园区工业设计级 CNC 道路路灯系统（同步 19.6m 中关村大道、顺直永平大道与精准交叉口净空！）
   const nearJunction = (px, pz, cx, cz) => {
     const avoidPts = [
-      [-211, -106, 15.5],
-      [-221, 122, 15.5],
-      [26, -153, 15.5],
-      [-210, -66, 11.5],
-      [-214, 22, 11.5],
+      [jPlZgc.x, jPlZgc.z, 22.0],
+      [jYpZgc.x, jYpZgc.z, 22.0],
+      [jNorthGate.x, jNorthGate.z, 19.5],
+      [-212.1, -66, 13.5],
+      [-216.2, 22, 13.5],
+      [-184.0, 22, 6.5],
+      [96.0, 21.8, 7.5],
     ];
     for (const [ax, az, rad] of avoidPts) {
       if (Math.hypot(px - ax, pz - az) < rad || Math.hypot(cx - ax, cz - az) < rad) return true;
@@ -2186,7 +2956,7 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
   const streetlightPlacements = [
     ...sampleStreetlightsAlongRoad({
       controlPoints: zhongguancunPts,
-      roadWidth: 17.5,
+      roadWidth: 19.6,
       roadTopY: ROAD_Y.ZGC,
       spacing: 24,
       staggerSides: true,
