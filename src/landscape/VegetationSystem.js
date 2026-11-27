@@ -141,11 +141,11 @@ function isOutsideRoundedRect(x, z, halfW, halfD, cornerR) {
   return false;
 }
 
-// All 8 campus roads & walkways synced with RoadAndParking.js + Cross-Worker Contract (#11)
+// All campus roads & walkways synced 1:1 with RoadAndParking.js
 const ROAD_SPECS = [
   {
     name: 'ZhongguancunAve',
-    halfW: 17.5 * 0.5,
+    halfW: 19.6 * 0.5,
     curbW: 0.42,
     segments: 80,
     controlPoints: [
@@ -176,11 +176,11 @@ const ROAD_SPECS = [
     curbW: 0.42,
     segments: 64,
     controlPoints: [
-      [-243, 114],
-      [-221, 122],
-      [-186, 138],
-      [-138, 164],
-      [-94, 184],
+      [-243, 111.3],
+      [-221.6, 121.8],
+      [-186, 139.3],
+      [-138, 162.9],
+      [-94, 184.6],
     ],
   },
   {
@@ -189,7 +189,7 @@ const ROAD_SPECS = [
     curbW: 0.42,
     segments: 32,
     controlPoints: [
-      [26, -153],
+      [26, -154.1],
       [26, -124],
       [26, -82],
     ],
@@ -200,7 +200,7 @@ const ROAD_SPECS = [
     curbW: 0.42,
     segments: 120,
     controlPoints: [
-      [-210, -66],
+      [-212.1, -66],
       [-174, -84],
       [-130, -98],
       [-58, -106],
@@ -208,7 +208,7 @@ const ROAD_SPECS = [
       [96, -104],
       [98, -64],
       [97, -12],
-      [96, 24],
+      [96, 22],
     ],
   },
   {
@@ -217,17 +217,17 @@ const ROAD_SPECS = [
     curbW: 0.42,
     segments: 64,
     controlPoints: [
-      [-214, 22],
+      [-216.2, 22],
       [-168, 22],
       [-146, 18],
       [-146, -34],
-      [-144, -93],
+      [-144, -94.9],
     ],
   },
   {
     name: 'WalkwayNW',
     halfW: 3.6 * 0.5,
-    curbW: 0.22,
+    curbW: 0.24,
     segments: 56,
     controlPoints: [
       [-177, -81.5],
@@ -240,7 +240,7 @@ const ROAD_SPECS = [
   {
     name: 'WalkwayMain',
     halfW: 3.6 * 0.5,
-    curbW: 0.22,
+    curbW: 0.24,
     segments: 160,
     controlPoints: [
       [-161, 122],
@@ -259,17 +259,39 @@ const ROAD_SPECS = [
       [154, -76],
       [136, -132],
       [98, -142],
-      [72, -160],
+      [72.5, -155.8],
+    ],
+  },
+  {
+    name: 'WestPorchPromenadeEW',
+    halfW: 3.2 * 0.5,
+    curbW: 0.22,
+    segments: 24,
+    controlPoints: [
+      [-143.0, 22.5],
+      [-112.0, 22.5],
+      [-80.0, 22.5],
+    ],
+  },
+  {
+    name: 'WestPorchPromenadeNS',
+    halfW: 3.2 * 0.5,
+    curbW: 0.22,
+    segments: 16,
+    controlPoints: [
+      [-130.0, 12.2],
+      [-130.0, 22.5],
+      [-130.0, 30.2],
     ],
   },
 ];
 
-// Extended outer municipal arterial corridors (synced with @env-clouds #38 Section 4 & @road-horizon)
+// Extended outer municipal arterial corridors (synced 1:1 with HardwarePlinth.js & RoadAndParking.js)
 // Includes straight tangent horizon guards past road fade-out endpoints so zero outer trees block vanishing road vistas.
 const EXTENDED_ARTERIAL_SPECS = [
   {
     name: 'ZhongguancunAveExt',
-    halfW: 17.5 * 0.5,
+    halfW: 19.6 * 0.5,
     curbW: 0.42,
     segments: 160,
     controlPoints: [
@@ -310,20 +332,21 @@ const EXTENDED_ARTERIAL_SPECS = [
     name: 'YongpingAveExt',
     halfW: 15.0 * 0.5,
     curbW: 0.42,
-    segments: 144,
+    segments: 160,
     controlPoints: [
-      [-450, 39],
-      [-346, 76],
-      [-243, 114],
-      [-221, 122],
-      [-186, 138],
-      [-138, 164],
-      [-94, 184],
-      [6, 230],
-      [106, 275],
+      [-450, 9.4],
+      [-346, 60.6],
+      [-243, 111.3],
+      [-221.6, 121.8],
+      [-186, 139.3],
+      [-138, 162.9],
+      [-94, 184.6],
+      [6, 233.8],
+      [106, 283.0],
+      [206, 332.2],
     ],
-    guardStart: [-705, -52],
-    guardEnd: [388, 402],
+    guardStart: [-705, -116.0],
+    guardEnd: [388, 421.7],
   },
 ];
 
@@ -406,25 +429,29 @@ const EAST_PIER = { ax: 99.0, az: 24.2, bx: 155.2, bz: 2.0 };
 const SW_BRIDGE = { ax: -181.0, az: 92.0, bx: -159.0, bz: 125.0 };
 
 const ROAD_JUNCTIONS = [
-  { x: -211, z: -106, r: 10.5 },
-  { x: -221, z: 122, r: 10.2 },
-  { x: 26, z: -153, r: 9.8 },
+  { x: -210.5, z: -106.4, r: 16.5 },
+  { x: -221.6, z: 121.8, r: 16.5 },
+  { x: 26.0, z: -154.1, r: 13.5 },
+  // East Portal turnaround apron at (96.0, 21.8, r=5.4) + EastPortal link
+  { x: 96.0, z: 21.8, r: 6.4 },
 ];
 
 const OUTDOOR_CAMERA_POLES = [
-  { x: 13.5, z: -104.0 },
+  { x: 15.6, z: -104.0 },
   { x: -150.2, z: -36.0 },
   { x: 103.5, z: -46.0 },
 ];
 
-// Precomputed SW Hill spiral path polyline (synced with TerrainAndStructures L2)
+// Precomputed SW Hill spiral path polyline (synced 1:1 with TerrainAndStructures.js)
 function buildSWHillSpiralPoints() {
   const pts = [];
   const steps = 84;
+  const startAngle = -Math.PI * 0.542;
+  const endAngle = startAngle + Math.PI * 2 * 1.25;
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
-    const angle = -Math.PI * 0.72 + t * Math.PI * 2 * 1.42;
-    const rad = THREE.MathUtils.lerp(21.2, 7.1, t);
+    const angle = THREE.MathUtils.lerp(startAngle, endAngle, t);
+    const rad = THREE.MathUtils.lerp(21.1, 7.05, t);
     pts.push(new THREE.Vector3(SW_HILL.cx + Math.cos(angle) * rad, 0, SW_HILL.cz + Math.sin(angle) * rad));
   }
   return pts;
@@ -1900,7 +1927,7 @@ export function buildVegetationSystem() {
   // Approximate inner municipal road centerlines (strictly for selecting outer-side border-bridging pockets)
   const pinglingApproxZ = (x) => -100 + -84 * ((x + 243) / 407);
   const zgcApproxX = (z) => -208 + -16 * ((z + 184) / 368);
-  const yongpingApproxZ = (x) => 114 + 70 * ((x + 243) / 149);
+  const yongpingApproxZ = (x) => 121.8 + 0.492 * (x + 221.6);
 
   // Sub-layer 1: Dense Border-Bridging Woodlands (eliminates any visible seam along the former ±243×±184 rim)
   const borderBridgeBands = [
@@ -2228,9 +2255,9 @@ export function buildVegetationSystem() {
   // 6. Crisp Chamfered Trimmed Boxwood Hedges (parking & plaza perimeter screening)
   // -------------------------------------------------------------------------
   const hedgeCandidates = [
-    // West Parking Lot perimeter hedges (set cleanly outside curbs & streetlights)
+    // West Parking Lot perimeter hedges (set cleanly outside curbs, streetlights & x=-130 pedestrian gate)
     { x: -120.0, z: -35.8, w: 1.2, h: 0.85, len: 26.0, rotY: Math.PI / 2 },
-    { x: -120.0, z: 15.8, w: 1.2, h: 0.85, len: 26.0, rotY: Math.PI / 2 },
+    { x: -115.5, z: 15.8, w: 1.2, h: 0.85, len: 21.0, rotY: Math.PI / 2 },
     { x: -98.8, z: -20.5, w: 1.15, h: 0.82, len: 14.0, rotY: 0 },
     { x: -98.8, z: 4.0, w: 1.15, h: 0.82, len: 14.0, rotY: 0 },
     // NE Parking Lot north & west screening hedges

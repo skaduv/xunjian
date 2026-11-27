@@ -1424,11 +1424,11 @@ function buildWaterfrontFurnitureAndPeople(mats, warmAccentMat, contactAoMat, ma
 
   // 3. L6 & L10 修复：精工悬挑长椅（蜜色柚木座面+靠背 + 深石墨悬挑双腿 + 精准落于各自地坪标高）
   const benches = [
-    // 北迎宾广场（PLAZA_TOP = 0.072）
+    // 北迎宾广场（PLAZA_TOP = 0.072，对称呼应南落客岛且距北侧消防环道留足 >=3.9m 净距）
     { x: 14, z: -89, y: ELEVATIONS.PLAZA_TOP, ry: Math.PI / 2 },
     { x: 38, z: -89, y: ELEVATIONS.PLAZA_TOP, ry: -Math.PI / 2 },
-    { x: 14, z: -104, y: ELEVATIONS.PLAZA_TOP, ry: Math.PI / 2 },
-    { x: 38, z: -104, y: ELEVATIONS.PLAZA_TOP, ry: -Math.PI / 2 },
+    { x: 14, z: -100.5, y: ELEVATIONS.PLAZA_TOP, ry: Math.PI / 2 },
+    { x: 38, z: -100.5, y: ELEVATIONS.PLAZA_TOP, ry: -Math.PI / 2 },
     // W2 临湖步道两侧（避让 x∈[-109,-87] 看台，落于 y=0.00 草坪）
     { x: -113, z: 51.6, y: 0.0, ry: 0 },
     { x: -82, z: 51.6, y: 0.0, ry: 0 },
