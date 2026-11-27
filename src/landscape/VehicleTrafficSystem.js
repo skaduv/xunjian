@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { ELEVATIONS } from '../config/campusConfig.js';
+import { createContactShadowTexture } from '../core/ProceduralTextures.js';
 
 /**
  * IOPLY 园区精工工业设计微缩多车型建模 + 真实连通道路图动态行车系统
@@ -466,31 +467,8 @@ function createSculptedLightBarGeometry() {
 }
 
 // ============================================================================
-// 3. 程序化柔边贴花纹理（暖棕灰接地 AO 接触阴影 + 夜间双前照灯羽化光束）
+// 3. 程序化柔边贴花纹理（夜间双前照灯羽化光束；接触阴影复用 ProceduralTextures.createContactShadowTexture）
 // ============================================================================
-
-function createContactShadowTexture() {
-  const size = 128;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-
-  ctx.clearRect(0, 0, size, size);
-  // 严格匹配 @art-lighting #9 暖灰褐 AO 阴影色 #2C2824
-  const grad = ctx.createRadialGradient(size * 0.5, size * 0.5, size * 0.15, size * 0.5, size * 0.5, size * 0.48);
-  grad.addColorStop(0.0, 'rgba(44, 40, 36, 0.68)');
-  grad.addColorStop(0.56, 'rgba(44, 40, 36, 0.40)');
-  grad.addColorStop(0.84, 'rgba(44, 40, 36, 0.12)');
-  grad.addColorStop(1.0, 'rgba(44, 40, 36, 0.0)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, size, size);
-
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.needsUpdate = true;
-  return tex;
-}
 
 function createHeadlightBeamTexture() {
   const w = 256;
@@ -1153,12 +1131,12 @@ export function buildVehicleTrafficSystem(maxAnisotropy = 4) {
   const taillightMat = new THREE.MeshBasicMaterial({ color: '#ffffff' });
   const beaconMat = new THREE.MeshBasicMaterial({ color: '#ffffff' });
 
-  const shadowTex = createContactShadowTexture();
-  shadowTex.anisotropy = Math.min(maxAnisotropy, 4);
+  const shadowTex = createContactShadowTexture(Math.min(maxAnisotropy, 4));
   const shadowMat = new THREE.MeshBasicMaterial({
     map: shadowTex,
+    color: '#FFE0D4',
     transparent: true,
-    opacity: 0.64,
+    opacity: 0.59,
     depthWrite: false,
     polygonOffset: true,
     polygonOffsetFactor: -1,
@@ -1209,6 +1187,14 @@ export function buildVehicleTrafficSystem(maxAnisotropy = 4) {
     });
   }
 
+  // Record exact contiguous static-parked prefix lengths so per-frame GPU uploads skip parked slots
+  const parkedGlobalCount = allVehicles.length;
+  const parkedTypeCounts = {
+    sedan: typeBuckets.sedan.length,
+    suv: typeBuckets.suv.length,
+    patrol: typeBuckets.patrol.length,
+  };
+
   const movingVehicles = [];
   for (let i = 0; i < MOVING_FLEET_CONFIG.length; i++) {
     const cfg = MOVING_FLEET_CONFIG[i];
@@ -1242,6 +1228,12 @@ export function buildVehicleTrafficSystem(maxAnisotropy = 4) {
   }
 
   const totalCount = allVehicles.length;
+  const movingGlobalCount = movingVehicles.length;
+  const movingTypeCounts = {
+    sedan: typeBuckets.sedan.length - parkedTypeCounts.sedan,
+    suv: typeBuckets.suv.length - parkedTypeCounts.suv,
+    patrol: typeBuckets.patrol.length - parkedTypeCounts.patrol,
+  };
   const patrolList = typeBuckets.patrol;
 
   const makeInst = (geo, mat, count, name, receiveShadow = false) => {
@@ -1516,8 +1508,8 @@ export function buildVehicleTrafficSystem(maxAnisotropy = 4) {
     dummy.updateMatrix();
     contactShadowInst.setMatrixAt(v.globalIdx, dummy.matrix);
 
-    // 夜间前照灯路面羽化双光束
-    if (v.isMoving) {
+    // 夜间前照灯路面羽化双光束（日间隐藏时跳过多余矩阵计算）
+    if (v.isMoving && headlightConeInst.visible) {
       const ox = v.x + spec.beamOriginX * s * cosY;
       const oz = v.z - spec.beamOriginX * s * sinY;
       dummy.position.set(ox, baseY + 0.026, oz);
@@ -1528,52 +1520,111 @@ export function buildVehicleTrafficSystem(maxAnisotropy = 4) {
     }
   }
 
+  function syncMovingHeadlightCones() {
+    for (let i = 0; i < movingVehicles.length; i++) {
+      const v = movingVehicles[i];
+      const spec = ARCHETYPE_SPECS[v.type];
+      const s = v.scale;
+      const cosY = Math.cos(v.rotY);
+      const sinY = Math.sin(v.rotY);
+      const ox = v.x + spec.beamOriginX * s * cosY;
+      const oz = v.z - spec.beamOriginX * s * sinY;
+      dummy.position.set(ox, v.y + 0.026, oz);
+      dummy.rotation.set(0, v.rotY, 0, 'XYZ');
+      dummy.scale.set(spec.beamLength * s, 1, spec.beamWidth * s);
+      dummy.updateMatrix();
+      headlightConeInst.setMatrixAt(v.movingIdx, dummy.matrix);
+    }
+    headlightConeInst.instanceMatrix.needsUpdate = true;
+  }
+
   const patrolSlotMap = new Map();
   patrolList.forEach((v, idx) => patrolSlotMap.set(v, idx));
 
+  const markAttrSubRange = (attr, startElem, elemCount) => {
+    if (!attr || elemCount <= 0) return;
+    if (typeof attr.clearUpdateRanges === 'function' && typeof attr.addUpdateRange === 'function') {
+      attr.clearUpdateRanges();
+      attr.addUpdateRange(startElem, elemCount);
+    }
+    attr.needsUpdate = true;
+  };
+
   let currentNight = 0;
   let elapsedTime = 0;
+  let lastLightNightFactor = -1;
+  const lastMovingBrake = new Float32Array(movingGlobalCount).fill(-1);
 
   function updateVehicleLights(nightFactor, timeSec) {
     const nf = Math.max(0, Math.min(1, nightFactor));
+    const nightChanged = Math.abs(nf - lastLightNightFactor) > 1e-4;
     const pulse = 0.86 + 0.14 * Math.sin(timeSec * 3.8);
 
-    shadowMat.opacity = THREE.MathUtils.lerp(0.64, 0.24, nf);
+    shadowMat.opacity = THREE.MathUtils.lerp(0.59, 0.22, nf);
+    const wasConesVisible = headlightConeInst.visible;
     headlightConeInst.visible = nf > 0.02;
     if (headlightConeInst.visible) {
       beamMat.opacity = nf * 0.56;
+      if (!wasConesVisible) {
+        syncMovingHeadlightCones();
+      }
     }
 
-    for (let i = 0; i < totalCount; i++) {
-      const v = allVehicles[i];
-      if (!v.isMoving) {
-        // 停放车辆：精致微光磨砂冰青日行灯镜片 + 深宝石红暗镜尾灯
-        const hlDim = THREE.MathUtils.lerp(0.70, 0.22, nf);
+    // Headlight & parked taillight colors depend solely on nightFactor (avoid redundant per-frame GPU uploads!)
+    if (nightChanged) {
+      const hlDim = THREE.MathUtils.lerp(0.70, 0.22, nf);
+      const tlDim = THREE.MathUtils.lerp(0.46, 0.18, nf);
+      for (let i = 0; i < parkedGlobalCount; i++) {
         tmpColor.setRGB(hlDim * 0.88, hlDim * 0.98, hlDim * 1.04);
         headlightInst.setColorAt(i, tmpColor);
 
-        const tlDim = THREE.MathUtils.lerp(0.46, 0.18, nf);
         tmpColor.setRGB(tlDim, tlDim * 0.16, tlDim * 0.18);
         taillightInst.setColorAt(i, tmpColor);
-      } else {
-        // 行驶车辆：日间清透冰青白 DRL (#D8F6FF)，夜间明亮暖白 LED (#FFF2D6)
-        const hr = THREE.MathUtils.lerp(0.92, 2.38, nf);
-        const hg = THREE.MathUtils.lerp(1.06, 2.18, nf);
-        const hb = THREE.MathUtils.lerp(1.14, 1.72, nf);
-        tmpColor.setRGB(hr, hg, hb);
-        headlightInst.setColorAt(i, tmpColor);
+      }
 
-        // 贯穿式宝石红尾灯 (#E83A3A)，制动与夜间顺滑高亮
-        const bk = v.brakeIntensity;
-        const baseR = THREE.MathUtils.lerp(0.92, 1.70, nf);
-        const baseG = THREE.MathUtils.lerp(0.18, 0.15, nf);
-        const baseB = THREE.MathUtils.lerp(0.18, 0.16, nf);
+      const hr = THREE.MathUtils.lerp(0.92, 2.38, nf);
+      const hg = THREE.MathUtils.lerp(1.06, 2.18, nf);
+      const hb = THREE.MathUtils.lerp(1.14, 1.72, nf);
+      tmpColor.setRGB(hr, hg, hb);
+      for (let i = parkedGlobalCount; i < totalCount; i++) {
+        headlightInst.setColorAt(i, tmpColor);
+      }
+
+      if (headlightInst.instanceColor) {
+        if (typeof headlightInst.instanceColor.clearUpdateRanges === 'function') {
+          headlightInst.instanceColor.clearUpdateRanges();
+        }
+        headlightInst.instanceColor.needsUpdate = true;
+      }
+    }
+
+    // Moving taillights: update only when nightFactor or any moving vehicle's braking intensity changes
+    let movingTailDirty = nightChanged;
+    const baseR = THREE.MathUtils.lerp(0.92, 1.70, nf);
+    const baseG = THREE.MathUtils.lerp(0.18, 0.15, nf);
+    const baseB = THREE.MathUtils.lerp(0.18, 0.16, nf);
+    for (let m = 0; m < movingGlobalCount; m++) {
+      const v = movingVehicles[m];
+      const bk = v.brakeIntensity;
+      if (nightChanged || Math.abs(bk - lastMovingBrake[m]) > 0.002) {
+        lastMovingBrake[m] = bk;
+        movingTailDirty = true;
         tmpColor.setRGB(
           THREE.MathUtils.lerp(baseR, 2.65, bk),
           THREE.MathUtils.lerp(baseG, 0.19, bk),
           THREE.MathUtils.lerp(baseB, 0.21, bk)
         );
-        taillightInst.setColorAt(i, tmpColor);
+        taillightInst.setColorAt(v.globalIdx, tmpColor);
+      }
+    }
+    if (movingTailDirty && taillightInst.instanceColor) {
+      if (nightChanged) {
+        if (typeof taillightInst.instanceColor.clearUpdateRanges === 'function') {
+          taillightInst.instanceColor.clearUpdateRanges();
+        }
+        taillightInst.instanceColor.needsUpdate = true;
+      } else {
+        markAttrSubRange(taillightInst.instanceColor, parkedGlobalCount * 3, movingGlobalCount * 3);
       }
     }
 
@@ -1589,9 +1640,8 @@ export function buildVehicleTrafficSystem(maxAnisotropy = 4) {
       patrolBeaconInst.setColorAt(p, tmpColor);
     }
 
-    if (headlightInst.instanceColor) headlightInst.instanceColor.needsUpdate = true;
-    if (taillightInst.instanceColor) taillightInst.instanceColor.needsUpdate = true;
     if (patrolBeaconInst.instanceColor) patrolBeaconInst.instanceColor.needsUpdate = true;
+    lastLightNightFactor = nf;
   }
 
   for (const v of allVehicles) {
@@ -1599,33 +1649,82 @@ export function buildVehicleTrafficSystem(maxAnisotropy = 4) {
   }
   updateVehicleLights(0, 0);
 
+  // Mark dynamic buffers as DynamicDrawUsage and upload full static+moving matrices once on frame 0
   const flushAllMatrices = () => {
-    bodyInsts.sedan.instanceMatrix.needsUpdate = true;
-    bodyInsts.suv.instanceMatrix.needsUpdate = true;
-    bodyInsts.patrol.instanceMatrix.needsUpdate = true;
-    cabinInsts.sedan.instanceMatrix.needsUpdate = true;
-    cabinInsts.suv.instanceMatrix.needsUpdate = true;
-    cabinInsts.patrol.instanceMatrix.needsUpdate = true;
-    trimInsts.sedan.instanceMatrix.needsUpdate = true;
-    trimInsts.suv.instanceMatrix.needsUpdate = true;
-    trimInsts.patrol.instanceMatrix.needsUpdate = true;
-    tireInst.instanceMatrix.needsUpdate = true;
-    rimInst.instanceMatrix.needsUpdate = true;
-    headlightInst.instanceMatrix.needsUpdate = true;
-    taillightInst.instanceMatrix.needsUpdate = true;
-    patrolBeaconInst.instanceMatrix.needsUpdate = true;
-    contactShadowInst.instanceMatrix.needsUpdate = true;
+    const dynamicInsts = [
+      bodyInsts.sedan,
+      bodyInsts.suv,
+      bodyInsts.patrol,
+      cabinInsts.sedan,
+      cabinInsts.suv,
+      cabinInsts.patrol,
+      trimInsts.sedan,
+      trimInsts.suv,
+      trimInsts.patrol,
+      tireInst,
+      rimInst,
+      headlightInst,
+      taillightInst,
+      patrolBeaconInst,
+      contactShadowInst,
+      headlightConeInst,
+    ];
+    for (const inst of dynamicInsts) {
+      inst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      if (inst !== headlightConeInst || headlightConeInst.visible) {
+        inst.instanceMatrix.needsUpdate = true;
+      }
+    }
+  };
+  flushAllMatrices();
+
+  // Per-frame GPU upload strictly limited to contiguous moving vehicle sub-ranges (zero static parked re-uploads!)
+  const flushMovingMatrices = () => {
+    if (movingTypeCounts.sedan > 0) {
+      const start = parkedTypeCounts.sedan * 16;
+      const len = movingTypeCounts.sedan * 16;
+      markAttrSubRange(bodyInsts.sedan.instanceMatrix, start, len);
+      markAttrSubRange(cabinInsts.sedan.instanceMatrix, start, len);
+      markAttrSubRange(trimInsts.sedan.instanceMatrix, start, len);
+    }
+    if (movingTypeCounts.suv > 0) {
+      const start = parkedTypeCounts.suv * 16;
+      const len = movingTypeCounts.suv * 16;
+      markAttrSubRange(bodyInsts.suv.instanceMatrix, start, len);
+      markAttrSubRange(cabinInsts.suv.instanceMatrix, start, len);
+      markAttrSubRange(trimInsts.suv.instanceMatrix, start, len);
+    }
+    if (movingTypeCounts.patrol > 0) {
+      const start = parkedTypeCounts.patrol * 16;
+      const len = movingTypeCounts.patrol * 16;
+      markAttrSubRange(bodyInsts.patrol.instanceMatrix, start, len);
+      markAttrSubRange(cabinInsts.patrol.instanceMatrix, start, len);
+      markAttrSubRange(trimInsts.patrol.instanceMatrix, start, len);
+      markAttrSubRange(patrolBeaconInst.instanceMatrix, start, len);
+    }
+    if (movingGlobalCount > 0) {
+      const wheelStart = parkedGlobalCount * 4 * 16;
+      const wheelLen = movingGlobalCount * 4 * 16;
+      markAttrSubRange(tireInst.instanceMatrix, wheelStart, wheelLen);
+      markAttrSubRange(rimInst.instanceMatrix, wheelStart, wheelLen);
+
+      const gStart = parkedGlobalCount * 16;
+      const gLen = movingGlobalCount * 16;
+      markAttrSubRange(headlightInst.instanceMatrix, gStart, gLen);
+      markAttrSubRange(taillightInst.instanceMatrix, gStart, gLen);
+      markAttrSubRange(contactShadowInst.instanceMatrix, gStart, gLen);
+    }
     if (headlightConeInst.visible) {
       headlightConeInst.instanceMatrix.needsUpdate = true;
     }
   };
-  flushAllMatrices();
 
   // ---- 6. 实时交通动力学更新 ----
   function update(dt, nightFactor = currentNight) {
     const safeDt = Math.min(Math.max(dt, 0.001), 0.1);
     elapsedTime += safeDt;
     currentNight = nightFactor;
+    headlightConeInst.visible = Math.max(0, Math.min(1, nightFactor)) > 0.02;
 
     const mvCount = movingVehicles.length;
 
@@ -1759,15 +1858,12 @@ export function buildVehicleTrafficSystem(maxAnisotropy = 4) {
     }
 
     updateVehicleLights(nightFactor, elapsedTime);
-    flushAllMatrices();
+    flushMovingMatrices();
   }
 
   function setNightFactor(nightFactor) {
     currentNight = nightFactor;
     updateVehicleLights(nightFactor, elapsedTime);
-    if (headlightConeInst.visible) {
-      headlightConeInst.instanceMatrix.needsUpdate = true;
-    }
   }
 
   function getTrafficStats() {
