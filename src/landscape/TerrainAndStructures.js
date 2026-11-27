@@ -257,19 +257,25 @@ function buildSculptedSWHillPark(mats, warmAccentMat, landmarkPoolMat) {
     const outX = px + dirX * pathHalfW;
     const outZ = pz + dirZ * pathHalfW;
 
-    const yMid = sampleSWHillHeight(px, pz) + 0.12;
-    const yIn = Math.max(yMid, sampleSWHillHeight(inX, inZ) + 0.1);
-    const yOut = yMid;
-    const yOutBot = sampleSWHillHeight(outX, outZ) - 0.36;
+    const yMid = sampleSWHillHeight(px, pz) + 0.18;
+    const yIn = Math.max(yMid, sampleSWHillHeight(inX, inZ) + 0.16);
+    const yOut = yMid - 0.02;
+    const yOutBot = sampleSWHillHeight(outX, outZ) - 0.42;
 
-    pPos.push(inX, yIn, inZ, outX, yOut, outZ, outX, yOutBot, outZ);
+    // 接近山顶平台出口时平滑过渡至 deckTop，与柚木平台零高差齐平
+    const summitBlend = smoothstep(0.92, 1.0, t);
+    const yInFinal = THREE.MathUtils.lerp(yIn, deckTop - 0.01, summitBlend);
+    const yOutFinal = THREE.MathUtils.lerp(yOut, deckTop - 0.01, summitBlend);
+
+    pPos.push(inX, yInFinal, inZ, outX, yOutFinal, outZ, outX, yOutBot, outZ);
   }
 
   for (let i = 0; i < pathSteps; i++) {
     const a = i * 3;
     const b = (i + 1) * 3;
-    pIdx.push(a, a + 1, b, a + 1, b + 1, b);
-    pIdx.push(a + 1, a + 2, b + 1, a + 2, b + 2, b + 1);
+    // angle 顺时针递增：T × R = +Y（顶面朝上可见），T × D = +R（外护沿朝坡外可见）
+    pIdx.push(a, b, a + 1, a + 1, b, b + 1);
+    pIdx.push(a + 1, b + 1, a + 2, a + 2, b + 1, b + 2);
   }
 
   const pathGeo = new THREE.BufferGeometry();
@@ -282,7 +288,7 @@ function buildSculptedSWHillPark(mats, warmAccentMat, landmarkPoolMat) {
   pathMesh.castShadow = true;
   grp.add(pathMesh);
 
-  // 山脚无缝暖石连接引道：将螺旋步道起点 (-128.8, 112.0) 严丝合缝接通北侧环湖步道 WalkwayMain (-129.33, 108.04)
+  // 山脚无缝暖石连接引道：将螺旋步道起点 (-128.8, 112.0, y=0.18) 平顺接通北侧环湖步道 WalkwayMain (-129.33, 108.04, y=0.06)
   const startPt = new THREE.Vector3(
     cx + Math.cos(startAngle) * 21.1,
     0,
@@ -290,10 +296,10 @@ function buildSculptedSWHillPark(mats, warmAccentMat, landmarkPoolMat) {
   );
   const walkPt = new THREE.Vector3(-129.33, 0, 108.04);
   const entryDir = new THREE.Vector3().subVectors(walkPt, startPt);
-  const entryLen = entryDir.length() + 1.4;
+  const entryLen = entryDir.length() + 1.5;
   const entryMid = new THREE.Vector3().addVectors(startPt, walkPt).multiplyScalar(0.5);
-  const entryApron = new THREE.Mesh(new THREE.BoxGeometry(pathHalfW * 2.1, 0.12, entryLen), mats.warmStone);
-  entryApron.position.set(entryMid.x, 0.012, entryMid.z);
+  const entryApron = new THREE.Mesh(new THREE.BoxGeometry(pathHalfW * 2.15, 0.16, entryLen), mats.warmStone);
+  entryApron.position.set(entryMid.x, 0.04, entryMid.z);
   entryApron.rotation.y = Math.atan2(entryDir.x, entryDir.z);
   entryApron.receiveShadow = true;
   grp.add(entryApron);
@@ -953,11 +959,31 @@ function buildEastLakesidePavilionAndPier(mats, warmAccentMat, maxAnisotropy = 4
   upperHex.receiveShadow = true;
   grp.add(upperHex);
 
-  // 东侧短石阶无缝衔接调整后的环湖绿道 WalkwayMain [160.5, -24]
-  const eastStep = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.18, 4.4), mats.warmStone);
-  eastStep.position.set(px + radius + 2.6, 0.04, pz);
-  eastStep.receiveShadow = true;
-  grp.add(eastStep);
+  // 东侧正交双阶嵌入式入口踏步平台（严格垂直对接六角东平边 x=155.37，平滑双阶降至 WalkwayMain 西路缘 x=158.65，底扎 -0.06m 零浮边）
+  const eastStep1 = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.36, 5.2), mats.warmStone);
+  eastStep1.position.set(155.7, 0.12, pz); // x∈[154.80,156.60] 深嵌入上阶六角边，y∈[-0.06,+0.30]
+  eastStep1.castShadow = true;
+  eastStep1.receiveShadow = true;
+  grp.add(eastStep1);
+
+  const eastStep2 = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.24, 5.4), mats.ashlar);
+  eastStep2.position.set(157.15, 0.06, pz); // x∈[156.40,157.90]，y∈[-0.06,+0.18]
+  eastStep2.castShadow = true;
+  eastStep2.receiveShadow = true;
+  grp.add(eastStep2);
+
+  const eastApronFlush = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.135, 5.4), mats.warmStone);
+  eastApronFlush.position.set(158.2, 0.0075, pz); // x∈[157.68,158.73] 齐平嵌入 WalkwayMain (0.059..0.081)，top=+0.075
+  eastApronFlush.receiveShadow = true;
+  grp.add(eastApronFlush);
+
+  for (const s of [-1, 1]) {
+    const stepCheek = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.42, 0.34), mats.ashlar);
+    stepCheek.position.set(156.8, 0.15, pz + s * 2.77); // x∈[155.20,158.40]，两侧收边挡墙
+    stepCheek.castShadow = true;
+    stepCheek.receiveShadow = true;
+    grp.add(stepCheek);
+  }
 
   // 6 根深石墨精工钢柱（带拉丝钛柱脚与柱头，严密连接 baseTop=0.45 至屋檐吊顶 4.98）
   for (let i = 0; i < 6; i++) {
@@ -1394,8 +1420,8 @@ function buildWaterfrontFurnitureAndPeople(mats, warmAccentMat, contactAoMat, ma
 
   // 4. L11 修复：CNC 精密机加工深石墨微距 LED 庭院柱灯（清障镜面水池、清障广场车流、精确标高）
   const lampPoints = [
-    // 北迎宾大道绿化带（x=16.0/36.0 精准位于道路路缘 17.18/34.82 与镜面水池压顶 15.02/36.98 之间！）
-    [16.0, -138], [36.0, -138], [16.0, -120], [36.0, -120],
+    // 北迎宾大道绿化带（x=16.0/36.0 精准位于道路路缘与镜面水池之间，z=-117 避让 -120 处道路路灯 3.0m！）
+    [16.0, -138], [36.0, -138], [16.0, -117.0], [36.0, -117.0],
     // 北广场两侧（L11 移离车流轨迹至 (9.5,-86) & (42.5,-86)，精准落于 plazaBox 0.072）
     [9.5, -86], [42.5, -86],
     // 中央门廊南缘（精准落于门廊地坪 0.175）
