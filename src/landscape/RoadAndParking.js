@@ -707,13 +707,39 @@ function buildUndergroundGarageRamp({
 
   const pitWallMat = new THREE.MeshStandardMaterial({ color: '#464C54', roughness: 0.74, metalness: 0.08 });
 
-  // 1. 东侧平坦过渡引道（x ∈ [69.5, 78.0], z ∈ [-104.5, -87.5]，严格覆盖整个坡道东口并与北消防环道齐平）
+  // 1. 东侧精简过渡引道（修剪至与坡道/消防环道等宽 6.6m：x ∈ [69.6, 76.2], z ∈ [-105.0, -87.6]）并配倒角暖石侧路缘
   const apronTopY = ROAD_Y.BRANCH_APRON; // 0.058（与 FireRing 0.062 错开 4mm，零 Z-Fighting）
   const apronH = apronTopY + 0.08;
-  const apron = new THREE.Mesh(new THREE.BoxGeometry(8.5, apronH, 17.0), rampFloorMat);
-  apron.position.set(73.75, apronTopY - apronH * 0.5, -96.0);
+  const apron = new THREE.Mesh(new THREE.BoxGeometry(6.6, apronH, 17.4), rampFloorMat);
+  apron.position.set(72.9, apronTopY - apronH * 0.5, -96.3);
   apron.receiveShadow = true;
   grp.add(apron);
+
+  // 引道东/南/西三侧精雕倒角暖石路缘（无缝对接北侧消防环道与坡道混凝土挡墙端头）
+  const addRampApronCurb = (cx, cz, pw, pd) => {
+    const cTop = ROAD_Y.BRANCH_CURB;
+    const cBot = -0.06;
+    const cH = cTop - cBot;
+    const bev = 0.028;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(pw, cH - bev, pd), curbMat);
+    body.position.set(cx, cBot + (cH - bev) * 0.5, cz);
+    body.receiveShadow = true;
+    grp.add(body);
+
+    const cap = new THREE.Mesh(
+      new THREE.BoxGeometry(Math.max(0.08, pw - 0.06), bev, Math.max(0.08, pd - 0.06)),
+      curbMat
+    );
+    cap.position.set(cx, cTop - bev * 0.5, cz);
+    cap.receiveShadow = true;
+    grp.add(cap);
+  };
+  // 东侧路缘 (z ∈ [-103.5, -87.18])
+  addRampApronCurb(76.41, -95.34, 0.42, 16.32);
+  // 南侧收口路缘 (x ∈ [70.0, 76.62]，无缝衔接南挡墙端头)
+  addRampApronCurb(73.31, -87.39, 6.62, 0.42);
+  // 西侧北段路缘 (z ∈ [-104.0, -94.9]，无缝衔接北挡墙端头)
+  addRampApronCurb(69.39, -99.45, 0.42, 9.10);
 
   // 2. 正向由东向西下沉车道坡板（东端顶面精准落于 y = +0.058 与引道严丝合缝，西端深入至 y = -3.106）
   const slopeThick = 0.24;
@@ -1520,8 +1546,8 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
     (z > -96.5 && Math.hypot(x + 144, z + 94.9) < 7.6) ||
     // 北迎宾大道与回转广场贯通区
     (x > 7.2 && x < 44.8 && z < -80.0 && z > -112.5) ||
-    // 1BF 地下车库引道南侧入口开口 (x ∈ [69.0, 78.5])
-    (x > 68.5 && x < 78.8 && z > -106.0 && z < -98.0) ||
+    // 1BF 地下车库引道南侧入口开口 (精准匹配修剪后 x ∈ [69.2, 76.6] 引道宽)
+    (x > 68.8 && x < 76.9 && z > -106.0 && z < -98.0) ||
     // 东北停车场南侧入口开口 (x ∈ [84.5, 94.5])
     (x > 84.2 && x < 94.8 && z < -105.5 && z > -111.5) ||
     // 东侧装卸区西侧加宽开口
@@ -1712,13 +1738,27 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
   westApron.receiveShadow = true;
   group.add(westApron);
 
-  // 西停车场入口内喉道平整沥青覆盖带（遮盖西排入口处的车位标线，与停车场顶面错开 4mm，净通车道清晰可读）
-  const throatTopY = ROAD_Y.WELCOME; // 0.066
+  // 西停车场入口内喉道平整沥青覆盖带（精准完整覆盖西排第 3–5 车位带 z ∈ [-16.68, -3.32], x ∈ [-137.0, -124.2]，零半截冰青车位外露！）
+  const throatTopY = ROAD_Y.WELCOME; // 0.066（高于停车场 0.062 精确 4mm，零 Z-Fighting）
   const throatH = throatTopY + 0.06;
-  const westThroat = new THREE.Mesh(new THREE.BoxGeometry(11.6, throatH, 8.6), lotPatchMat);
-  westThroat.position.set(-131.2, throatTopY - throatH * 0.5, -10.0);
+  const westThroat = new THREE.Mesh(new THREE.BoxGeometry(12.8, throatH, 13.36), lotPatchMat);
+  westThroat.position.set(-130.6, throatTopY - throatH * 0.5, -10.0);
   westThroat.receiveShadow = true;
   group.add(westThroat);
+
+  // 入口喉道两侧精致白边线与中央出入分道虚线
+  for (const lz of [-16.46, -3.54]) {
+    const edgeLine = new THREE.Mesh(new THREE.BoxGeometry(11.6, 0.005, 0.14), crosswalkMat);
+    edgeLine.position.set(-130.6, throatTopY + 0.0025, lz);
+    edgeLine.receiveShadow = true;
+    group.add(edgeLine);
+  }
+  for (const lx of [-134.8, -131.6, -128.4]) {
+    const dash = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.005, 0.12), crosswalkMat);
+    dash.position.set(lx, throatTopY + 0.0025, -10.0);
+    dash.receiveShadow = true;
+    group.add(dash);
+  }
 
   // 东侧装卸区平滑加宽泊位（y = 0.058，与 FireRing 0.062 错开 4mm 零闪烁）
   const loadingH = ROAD_Y.BRANCH_APRON + 0.06;
@@ -1808,7 +1848,7 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
     openGap: { side: 'west', min: -14.5, max: -5.5 },
   });
 
-  // 西停车场双联太阳能 EV 充电车棚（北翼 [-30.2, -15.8] & 南翼 [-4.2, +10.2]，彻底让出中间 z ∈ [-14.5, -5.5] 行车通道！）
+  // 西停车场双联太阳能 EV 充电车棚（北翼 [-30.2, -16.8] & 南翼 [-3.2, +10.2]，精准对齐车位分界线并让出完整入口喉道！）
   // 立柱 x = -134.20，充电桩 x = -133.64；泊车位于 x = -129.0（车尾 -131.45），净距 >= 1.75m 绝无碰撞！
   const carportSharedMats = {
     solarMat,
@@ -1824,8 +1864,8 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
   group.add(
     buildSolarCarport({
       x: -131.6,
-      z: -23.0,
-      lengthZ: 14.4,
+      z: -23.5,
+      lengthZ: 13.4,
       widthX: 6.2,
       ...carportSharedMats,
     })
@@ -1833,21 +1873,21 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
   group.add(
     buildSolarCarport({
       x: -131.6,
-      z: 3.0,
-      lengthZ: 14.4,
+      z: 3.5,
+      lengthZ: 13.4,
       widthX: 6.2,
       ...carportSharedMats,
     })
   );
 
-  // 西停车场智能门岗亭（坐落于西翼支线与西停车场之间的草坪安全岛，100% 避让路面与车道）+ 抬起式双侧智能道闸
+  // 西停车场智能门岗亭（坐落于西翼支线与西停车场之间的草坪安全岛，100% 避让路面与车道）+ 抬起式双侧智能道闸（精准退入入口净喉道内，远离南北车位！）
   group.add(
     buildParkingGateAssembly({
       kioskPos: [-139.8, -16.6],
       kioskRotY: 0,
       barriers: [
-        { x: -136.4, z: -14.8, rotY: -Math.PI / 2, hasArm: true, armLen: 3.2, armTilt: 1.14 },
-        { x: -136.4, z: -5.2, rotY: Math.PI / 2, hasArm: true, armLen: 3.2, armTilt: 1.14 },
+        { x: -136.4, z: -13.9, rotY: -Math.PI / 2, hasArm: true, armLen: 3.0, armTilt: 1.16 },
+        { x: -136.4, z: -6.1, rotY: Math.PI / 2, hasArm: true, armLen: 3.0, armTilt: 1.16 },
       ],
       satinClayMat,
       darkGraphiteMat,
@@ -2031,13 +2071,13 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
         Math.hypot(px + 146, pz - 18) < 10.5 ||
         cx < -198,
     }),
-    // 西侧地面停车场外缘照明路灯
+    // 西侧地面停车场外缘照明路灯（东缘 4 盏 + 北南端中轴各 1 盏，100% 避让西侧双联太阳能车棚挑檐！）
     { x: -102.0, z: -26, rotY: Math.PI, surfY: 0.0, roadTopY: ROAD_Y.FIRE_LOT, scale: 0.82, poolReach: 2.8, poolSize: 11.4 },
     { x: -102.0, z: -13, rotY: Math.PI, surfY: 0.0, roadTopY: ROAD_Y.FIRE_LOT, scale: 0.82, poolReach: 2.8, poolSize: 11.4 },
     { x: -102.0, z: 0, rotY: Math.PI, surfY: 0.0, roadTopY: ROAD_Y.FIRE_LOT, scale: 0.82, poolReach: 2.8, poolSize: 11.4 },
     { x: -102.0, z: 10, rotY: Math.PI, surfY: 0.0, roadTopY: ROAD_Y.FIRE_LOT, scale: 0.82, poolReach: 2.8, poolSize: 11.4 },
-    { x: -138.0, z: -23.0, rotY: 0, surfY: 0.0, roadTopY: ROAD_Y.FIRE_LOT, scale: 0.82, poolReach: 2.8, poolSize: 11.4 },
-    { x: -138.0, z: 3.5, rotY: 0, surfY: 0.0, roadTopY: ROAD_Y.FIRE_LOT, scale: 0.82, poolReach: 2.8, poolSize: 11.4 },
+    { x: -120.0, z: -32.8, rotY: -Math.PI / 2, surfY: 0.0, roadTopY: ROAD_Y.FIRE_LOT, scale: 0.82, poolReach: 2.8, poolSize: 11.4 },
+    { x: -120.0, z: 12.8, rotY: Math.PI / 2, surfY: 0.0, roadTopY: ROAD_Y.FIRE_LOT, scale: 0.82, poolReach: 2.8, poolSize: 11.4 },
     // 东北侧地面停车场外缘照明路灯（对齐新停车场范围 z ∈ [-129.0, -110.0]）
     { x: 105.2, z: -124.5, rotY: Math.PI, surfY: 0.0, roadTopY: ROAD_Y.FIRE_LOT, scale: 0.8, poolReach: 2.8, poolSize: 11.0 },
     { x: 105.2, z: -114.0, rotY: Math.PI, surfY: 0.0, roadTopY: ROAD_Y.FIRE_LOT, scale: 0.8, poolReach: 2.8, poolSize: 11.0 },
@@ -2062,8 +2102,8 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
   const carportPools = new THREE.InstancedMesh(cyanPoolGeo, cyanPoolMat, 3);
   const cpDummy = new THREE.Object3D();
   [
-    { x: -130.6, z: -23.0, sx: 10.2, sz: 16.5 },
-    { x: -130.6, z: 3.0, sx: 10.2, sz: 16.5 },
+    { x: -130.6, z: -23.5, sx: 10.2, sz: 15.2 },
+    { x: -130.6, z: 3.5, sx: 10.2, sz: 15.2 },
     { x: 80.2, z: -119.5, sx: 9.6, sz: 17.5 },
   ].forEach((p, idx) => {
     cpDummy.position.set(p.x, ROAD_Y.FIRE_LOT + 0.015, p.z);
@@ -2084,10 +2124,10 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
     blending: THREE.AdditiveBlending,
     visible: false,
   });
-  const rampPoolMesh = new THREE.Mesh(new THREE.PlaneGeometry(10.5, 11.0), rampPoolMat);
+  const rampPoolMesh = new THREE.Mesh(new THREE.PlaneGeometry(7.4, 10.0), rampPoolMat);
   rampPoolMesh.userData.noMerge = true;
   rampPoolMesh.rotation.x = -Math.PI / 2;
-  rampPoolMesh.position.set(73.6, ROAD_Y.BRANCH_APRON + 0.015, -96.0);
+  rampPoolMesh.position.set(72.9, ROAD_Y.BRANCH_APRON + 0.015, -95.6);
   group.add(rampPoolMesh);
 
   return {
