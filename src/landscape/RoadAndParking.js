@@ -14,12 +14,13 @@ import {
  * IOPLY 园区精工工业模型道路网络、倒角暖石路缘、智能停车场（太阳能车棚/充电桩/门岗道闸）、
  * CNC 精雕路灯体系与 1BF 地下车库下沉坡道
  *
- * 工程与材质契约（严格对齐 @art-lighting #9 与 @joint-auditor #11）：
+ * 工程与材质契约（严格对齐 @env-clouds #38 无界云雾融合规范 & 既有 R1–R10 接缝修复）：
  * - 零闪烁阶梯标高（相邻搭接面分离 >= 4mm，严禁 coplanar Z-Fighting）
- * - 全部道路与路缘外缘顶点精准约束于底座圆角内框 ±242.2 × ±183.2（圆角 r = 25.2）内
- * - 45° 倒角暖石路缘石配备交叉口/广场/停车场引道/装卸区/坡道智能净空断口，零穿插横切
+ * - 三条外围市政主干道（中关村大道、平陵西路、永平大道）解除硬边界钳制，沿切线自然延展约 220m
+ *   穿过无界外围绿地并经逐像素平滑透明渐变无痕消隐入云雾；核心园区段保持不透明实心阴影与车辆兼容
+ * - 45° 倒角暖石路缘石于 d_out <= 32m 外平滑缓降没入绿地，且保留全部交叉口/广场/停车场/坡道净空断口
  * - 1BF 坡道精准正向由东入地（rotation.z = +0.155）、挡墙深入基坑至 -3.50m、雨棚立柱逐根精确对接斜玻璃
- * - 全部路灯采用 9 次 InstancedMesh Draw Call（0 PointLight），加权倒角基座下探至 y = -0.04m 彻底杜绝悬空
+ * - 全部 64 盏路灯采用 InstancedMesh 批渲染（0 PointLight），加权倒角基座下探至 y = -0.04m 彻底杜绝悬空
  */
 
 // 道路分层标高表（与 VehicleTrafficSystem.js 的 sampleRoadSurfaceY 保持毫米级 1:1 同步）
@@ -41,6 +42,75 @@ const ROAD_Y = {
   PLAZA: ELEVATIONS.PLAZA_TOP, // 0.072
   JUNCTION: 0.076,
 };
+
+// 园区核心圆角矩形外距参数（与 HardwarePlinth.js 的 d_out 精确 1:1 同步：486×368, r=26）
+const CAMPUS_INNER_HW = PLINTH_CONFIG.width * 0.5 - PLINTH_CONFIG.cornerRadius; // 217
+const CAMPUS_INNER_HD = PLINTH_CONFIG.depth * 0.5 - PLINTH_CONFIG.cornerRadius; // 158
+const CAMPUS_CORNER_R = PLINTH_CONFIG.cornerRadius; // 26
+
+function calcCampusOutDist(x, z) {
+  const qx = Math.abs(x) - CAMPUS_INNER_HW;
+  const qz = Math.abs(z) - CAMPUS_INNER_HD;
+  return Math.hypot(Math.max(0, qx), Math.max(0, qz)) + Math.min(Math.max(qx, qz), 0) - CAMPUS_CORNER_R;
+}
+
+function smoothstep01(edge0, edge1, x) {
+  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * 为外延市政主干道尾部创建逐像素平滑消隐材质（与核心不透明段在接缝处 alpha=1.0 精确无缝对齐，
+ * 同时按世界空间外距 d_out ∈ [115m, 212m] 与端头弧长距离双重柔化消隐入外围草地与云雾，零硬切口！）
+ */
+function createBoundlessArterialFadeMaterial(baseMat) {
+  const mat = baseMat.clone();
+  mat.name = 'ArterialRoadBoundlessFade';
+  mat.transparent = true;
+  mat.depthWrite = false;
+  mat.polygonOffset = true;
+  mat.polygonOffsetFactor = -0.5;
+  mat.polygonOffsetUnits = -1;
+  mat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        attribute float aEndDist;
+        varying vec2 vRoadWorldXZ;
+        varying float vRoadEndDist;`
+      )
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        vec4 roadWorldPos = modelMatrix * vec4(transformed, 1.0);
+        vRoadWorldXZ = roadWorldPos.xz;
+        vRoadEndDist = aEndDist;`
+      );
+
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        varying vec2 vRoadWorldXZ;
+        varying float vRoadEndDist;`
+      )
+      .replace(
+        '#include <alphamap_fragment>',
+        `#include <alphamap_fragment>
+        vec2 roadQ = abs(vRoadWorldXZ) - vec2(${CAMPUS_INNER_HW.toFixed(1)}, ${CAMPUS_INNER_HD.toFixed(1)});
+        float roadDOut = length(max(roadQ, 0.0)) + min(max(roadQ.x, roadQ.y), 0.0) - ${CAMPUS_CORNER_R.toFixed(1)};
+        float roadFadeOut = 1.0 - smoothstep(115.0, 212.0, roadDOut);
+        float roadFadeEnd = smoothstep(6.0, 108.0, vRoadEndDist);
+        float roadT = clamp(roadFadeOut * roadFadeEnd, 0.0, 1.0);
+        float roadAlpha = roadT * (0.60 + 0.40 * roadT);
+        diffuseColor.a *= roadAlpha;
+        if (diffuseColor.a < 0.004) discard;`
+      );
+  };
+  mat.customProgramCacheKey = () => 'arterial-boundless-fade-v1';
+  return mat;
+}
 
 /**
  * 将任意水平顶点精准钳制于硬件底座内腔圆角矩形内（±242.2 × ±183.2, r = 25.2），
@@ -179,10 +249,10 @@ function createSoftAOTexture() {
   const ctx = canvas.getContext('2d');
   const half = size * 0.5;
   const grad = ctx.createRadialGradient(half, half, size * 0.08, half, half, half);
-  grad.addColorStop(0.0, 'rgba(44, 40, 36, 0.52)');
-  grad.addColorStop(0.45, 'rgba(44, 40, 36, 0.24)');
-  grad.addColorStop(0.82, 'rgba(44, 40, 36, 0.06)');
-  grad.addColorStop(1.0, 'rgba(44, 40, 36, 0.0)');
+  grad.addColorStop(0.0, 'rgba(22, 34, 24, 0.54)');
+  grad.addColorStop(0.45, 'rgba(22, 34, 24, 0.25)');
+  grad.addColorStop(0.82, 'rgba(22, 34, 24, 0.06)');
+  grad.addColorStop(1.0, 'rgba(22, 34, 24, 0.0)');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, size, size);
 
@@ -194,8 +264,8 @@ function createSoftAOTexture() {
 
 /**
  * 精工 3D 挤压道路带生成器：
- * - 路面实体严格钳制至硬件底座圆角内框
- * - 两侧采用 45° 精雕倒角暖石路缘石截面（支持交叉口/广场/引道自动断口与端面封盖）
+ * - 支持核心园区道路钳制与外围市政主干道无界自然延展（核心段不透明实心，外延尾部平滑透明消隐）
+ * - 两侧采用 45° 精雕倒角暖石路缘石截面（支持交叉口/广场/入口自动断口及外延平滑缓降收尾）
  */
 function buildExtrudedRoadRibbon({
   controlPoints,
@@ -207,9 +277,12 @@ function buildExtrudedRoadRibbon({
   segments = 56,
   uvTileLength = 14,
   roadMaterial,
+  fadeRoadMaterial = null,
   curbMaterial,
   closed = false,
   withCurbs = true,
+  clampToPlinth = true,
+  curbMaxOutDist = null,
   curbSuppressFn = null,
 }) {
   const grp = new THREE.Group();
@@ -228,90 +301,160 @@ function buildExtrudedRoadRibbon({
     rights.push(new THREE.Vector3(-tan.z, 0, tan.x).normalize());
     if (i > 0) arcLens.push(arcLens[i - 1] + pts[i].distanceTo(pts[i - 1]));
   }
+  const totalArcLen = arcLens[count - 1];
 
-  // 1. 路面实心挤压带（每个外缘顶点严格钳制在底座内框之内）
-  const buildRoadSurface = () => {
+  const resolveXZ = (x, z) => (clampToPlinth ? clampVertexToPlinth(x, z) : [x, z]);
+
+  // 1. 路面实心挤压带（无界主干道自动拆分为不透明核心段 + 平滑渐隐外延尾段，接缝处 alpha=1.0 零闪烁）
+  const buildRoadSurfaceRuns = (segPredicate, mat, { isFadeTail = false } = {}) => {
+    const runs = [];
+    let runStart = -1;
+    for (let i = 0; i < count - 1; i++) {
+      const ok = segPredicate(i);
+      if (ok && runStart === -1) runStart = i;
+      if (!ok && runStart !== -1) {
+        runs.push([runStart, i]);
+        runStart = -1;
+      }
+    }
+    if (runStart !== -1) runs.push([runStart, count - 1]);
+    if (runs.length === 0) return null;
+
     const positions = [];
     const uvs = [];
+    const endDists = isFadeTail ? [] : null;
     const indices = [];
+    const wallBotY = isFadeTail ? 0.0 : bottomY;
 
-    for (let i = 0; i < count; i++) {
-      const p = pts[i];
-      const r = rights[i];
-      const v = arcLens[i] / uvTileLength;
-      const [lx, lz] = clampVertexToPlinth(p.x - r.x * halfW, p.z - r.z * halfW);
-      const [rx, rz] = clampVertexToPlinth(p.x + r.x * halfW, p.z + r.z * halfW);
-      positions.push(lx, topY, lz, rx, topY, rz);
-      uvs.push(0, v, 1, v);
-    }
-    for (let i = 0; i < count - 1; i++) {
-      const a = i * 2;
-      indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
-    }
+    for (const [startIdx, endIdx] of runs) {
+      const runLen = endIdx - startIdx + 1;
 
-    // 左壁
-    const leftBase = positions.length / 3;
-    for (let i = 0; i < count; i++) {
-      const p = pts[i];
-      const r = rights[i];
-      const v = arcLens[i] / uvTileLength;
-      const [lx, lz] = clampVertexToPlinth(p.x - r.x * halfW, p.z - r.z * halfW);
-      positions.push(lx, topY, lz, lx, bottomY, lz);
-      uvs.push(0.02, v, 0.02, v);
-    }
-    for (let i = 0; i < count - 1; i++) {
-      const a = leftBase + i * 2;
-      indices.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
-    }
+      // 顶面
+      const topBase = positions.length / 3;
+      for (let i = startIdx; i <= endIdx; i++) {
+        const p = pts[i];
+        const r = rights[i];
+        const v = arcLens[i] / uvTileLength;
+        const [lx, lz] = resolveXZ(p.x - r.x * halfW, p.z - r.z * halfW);
+        const [rx, rz] = resolveXZ(p.x + r.x * halfW, p.z + r.z * halfW);
+        positions.push(lx, topY, lz, rx, topY, rz);
+        uvs.push(0, v, 1, v);
+        if (endDists) {
+          const ed = Math.min(arcLens[i], totalArcLen - arcLens[i]);
+          endDists.push(ed, ed);
+        }
+      }
+      for (let i = 0; i < runLen - 1; i++) {
+        const a = topBase + i * 2;
+        indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+      }
 
-    // 右壁
-    const rightBase = positions.length / 3;
-    for (let i = 0; i < count; i++) {
-      const p = pts[i];
-      const r = rights[i];
-      const v = arcLens[i] / uvTileLength;
-      const [rx, rz] = clampVertexToPlinth(p.x + r.x * halfW, p.z + r.z * halfW);
-      positions.push(rx, topY, rz, rx, bottomY, rz);
-      uvs.push(0.98, v, 0.98, v);
-    }
-    for (let i = 0; i < count - 1; i++) {
-      const a = rightBase + i * 2;
-      indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+      // 左壁
+      const leftBase = positions.length / 3;
+      for (let i = startIdx; i <= endIdx; i++) {
+        const p = pts[i];
+        const r = rights[i];
+        const v = arcLens[i] / uvTileLength;
+        const [lx, lz] = resolveXZ(p.x - r.x * halfW, p.z - r.z * halfW);
+        positions.push(lx, topY, lz, lx, wallBotY, lz);
+        uvs.push(0.02, v, 0.02, v);
+        if (endDists) {
+          const ed = Math.min(arcLens[i], totalArcLen - arcLens[i]);
+          endDists.push(ed, ed);
+        }
+      }
+      for (let i = 0; i < runLen - 1; i++) {
+        const a = leftBase + i * 2;
+        indices.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+      }
+
+      // 右壁
+      const rightBase = positions.length / 3;
+      for (let i = startIdx; i <= endIdx; i++) {
+        const p = pts[i];
+        const r = rights[i];
+        const v = arcLens[i] / uvTileLength;
+        const [rx, rz] = resolveXZ(p.x + r.x * halfW, p.z + r.z * halfW);
+        positions.push(rx, topY, rz, rx, wallBotY, rz);
+        uvs.push(0.98, v, 0.98, v);
+        if (endDists) {
+          const ed = Math.min(arcLens[i], totalArcLen - arcLens[i]);
+          endDists.push(ed, ed);
+        }
+      }
+      for (let i = 0; i < runLen - 1; i++) {
+        const a = rightBase + i * 2;
+        indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+      }
     }
 
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    if (endDists) {
+      geo.setAttribute('aEndDist', new THREE.Float32BufferAttribute(endDists, 1));
+    }
     geo.setIndex(indices);
     geo.computeVertexNormals();
 
-    const mesh = new THREE.Mesh(geo, roadMaterial);
+    const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
+    if (isFadeTail) {
+      mesh.userData.noMerge = true;
+    }
     return mesh;
   };
 
-  grp.add(buildRoadSurface());
+  if (fadeRoadMaterial) {
+    const isCoreStation = (idx) => {
+      const p = pts[idx];
+      const r = rights[idx];
+      const dOutMax = Math.max(
+        calcCampusOutDist(p.x - r.x * halfW, p.z - r.z * halfW),
+        calcCampusOutDist(p.x + r.x * halfW, p.z + r.z * halfW)
+      );
+      const ed = Math.min(arcLens[idx], totalArcLen - arcLens[idx]);
+      return dOutMax <= 113.0 && ed >= 110.0;
+    };
+    const coreMesh = buildRoadSurfaceRuns(
+      (i) => isCoreStation(i) && isCoreStation(i + 1),
+      roadMaterial,
+      { isFadeTail: false }
+    );
+    const fadeMesh = buildRoadSurfaceRuns(
+      (i) => !(isCoreStation(i) && isCoreStation(i + 1)),
+      fadeRoadMaterial,
+      { isFadeTail: true }
+    );
+    if (coreMesh) grp.add(coreMesh);
+    if (fadeMesh) grp.add(fadeMesh);
+  } else {
+    const fullMesh = buildRoadSurfaceRuns(() => true, roadMaterial, { isFadeTail: false });
+    if (fullMesh) grp.add(fullMesh);
+  }
 
-  // 2. 45° 倒角暖石路缘石（支持沿线自动净空跳过交叉口/广场/入口并封盖端面）
+  // 2. 45° 倒角暖石路缘石（支持沿线自动净空跳过交叉口/广场/入口，及外延段平滑缓降没入草地）
   const buildChamferedCurbSide = (sideSign) => {
     const innerOff = sideSign * halfW;
     const outerOff = sideSign * (halfW + curbWidth);
     const midOff = (innerOff + outerOff) * 0.5;
-    const bev = Math.min(0.032, curbWidth * 0.22);
+    const baseBev = Math.min(0.032, curbWidth * 0.22);
 
-    // 判定每段是否处于净空抑止区
+    // 判定每段是否处于净空抑止区或超出外围路缘截止距离
     const activeSeg = new Array(count - 1).fill(true);
-    if (curbSuppressFn) {
-      for (let i = 0; i < count - 1; i++) {
-        const pA = pts[i];
-        const pB = pts[i + 1];
-        const rA = rights[i];
-        const rB = rights[i + 1];
-        const mx = (pA.x + rA.x * midOff + pB.x + rB.x * midOff) * 0.5;
-        const mz = (pA.z + rA.z * midOff + pB.z + rB.z * midOff) * 0.5;
-        if (curbSuppressFn(mx, mz, sideSign)) {
-          activeSeg[i] = false;
-        }
+    for (let i = 0; i < count - 1; i++) {
+      const pA = pts[i];
+      const pB = pts[i + 1];
+      const rA = rights[i];
+      const rB = rights[i + 1];
+      const mx = (pA.x + rA.x * midOff + pB.x + rB.x * midOff) * 0.5;
+      const mz = (pA.z + rA.z * midOff + pB.z + rB.z * midOff) * 0.5;
+      if (curbMaxOutDist !== null && calcCampusOutDist(mx, mz) > curbMaxOutDist) {
+        activeSeg[i] = false;
+        continue;
+      }
+      if (curbSuppressFn && curbSuppressFn(mx, mz, sideSign)) {
+        activeSeg[i] = false;
       }
     }
 
@@ -332,15 +475,7 @@ function buildExtrudedRoadRibbon({
     // 截面 6 点按从左(-right)到右(+right)排列，确保法线严格朝外
     const leftEdge = Math.min(innerOff, outerOff);
     const rightEdge = Math.max(innerOff, outerOff);
-    const profileOffsets = [
-      [leftEdge, bottomY],
-      [leftEdge, curbTopY - bev],
-      [leftEdge + bev, curbTopY],
-      [rightEdge - bev, curbTopY],
-      [rightEdge, curbTopY - bev],
-      [rightEdge, bottomY],
-    ];
-    const pCount = profileOffsets.length;
+    const pCount = 6;
 
     const positions = [];
     const indices = [];
@@ -352,9 +487,33 @@ function buildExtrudedRoadRibbon({
       for (let i = startIdx; i <= endIdx; i++) {
         const p = pts[i];
         const r = rights[i];
+
+        // 外围市政路缘在 [curbMaxOutDist - 12m, curbMaxOutDist] 区间平滑缓降至草坪顶面下 -8mm，杜绝突兀混凝土断头
+        let localCurbTop = curbTopY;
+        let localBev = baseBev;
+        if (curbMaxOutDist !== null) {
+          const cx = p.x + r.x * midOff;
+          const cz = p.z + r.z * midOff;
+          const dOut = calcCampusOutDist(cx, cz);
+          const taper = smoothstep01(curbMaxOutDist - 12.0, curbMaxOutDist, dOut);
+          if (taper > 0) {
+            localCurbTop = curbTopY * (1 - taper) + -0.008 * taper;
+            localBev = baseBev * (1 - taper);
+          }
+        }
+
+        const profileOffsets = [
+          [leftEdge, bottomY],
+          [leftEdge, localCurbTop - localBev],
+          [leftEdge + localBev, localCurbTop],
+          [rightEdge - localBev, localCurbTop],
+          [rightEdge, localCurbTop - localBev],
+          [rightEdge, bottomY],
+        ];
+
         for (let k = 0; k < pCount; k++) {
           const [off, py] = profileOffsets[k];
-          const [vx, vz] = clampVertexToPlinth(p.x + r.x * off, p.z + r.z * off);
+          const [vx, vz] = resolveXZ(p.x + r.x * off, p.z + r.z * off);
           positions.push(vx, py, vz);
         }
       }
@@ -705,7 +864,7 @@ function buildUndergroundGarageRamp({
   const rampW = 7.0;
   const slopeAngle = 0.155; // 正值：东端 (+X) 高于西端 (-X)，车辆由东侧引道平滑下行入地下 1BF！
 
-  const pitWallMat = new THREE.MeshStandardMaterial({ color: '#464C54', roughness: 0.74, metalness: 0.08 });
+  const pitWallMat = new THREE.MeshStandardMaterial({ color: '#40464E', roughness: 0.74, metalness: 0.08 });
 
   // 1. 东侧精简过渡引道（修剪至与坡道/消防环道等宽 6.6m：x ∈ [69.6, 76.2], z ∈ [-105.0, -87.6]）并配倒角暖石侧路缘
   const apronTopY = ROAD_Y.BRANCH_APRON; // 0.058（与 FireRing 0.062 错开 4mm，零 Z-Fighting）
@@ -891,7 +1050,7 @@ function buildRoadStreetlights(streetlightPlacements, maxAnisotropy) {
     metalness: 0.65,
   });
   const plinthMat = new THREE.MeshStandardMaterial({
-    color: '#B9B2A7',
+    color: '#B6B0A6',
     roughness: 0.56,
     metalness: 0.08,
   });
@@ -1408,22 +1567,23 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
   const fireTex = createAsphaltRoadTexture('firelane', maxAnisotropy);
   const plazaTex = createPlazaPaverTexture(maxAnisotropy);
   const solarTex = createSolarPanelTexture(maxAnisotropy);
-  const junctionTex = createInlineSlateAsphaltTexture('#484E57', maxAnisotropy);
-  const lotPatchTex = createInlineSlateAsphaltTexture('#59606A', maxAnisotropy);
+  const junctionTex = createInlineSlateAsphaltTexture('#404750', maxAnisotropy);
+  const lotPatchTex = createInlineSlateAsphaltTexture('#565D67', maxAnisotropy);
   const walkwayTex = createInlineWalkwayStoneTexture(maxAnisotropy);
 
-  // 严格对齐 @art-lighting #9 棚拍材质与色板
-  const arterialMat = new THREE.MeshStandardMaterial({ map: arterialTex, roughness: 0.76, metalness: 0.04 });
-  const campusRoadMat = new THREE.MeshStandardMaterial({ map: campusTex, roughness: 0.76, metalness: 0.04 });
-  const fireRoadMat = new THREE.MeshStandardMaterial({ map: fireTex, roughness: 0.76, metalness: 0.04 });
-  const junctionMat = new THREE.MeshStandardMaterial({ map: junctionTex, roughness: 0.76, metalness: 0.04 });
-  const lotPatchMat = new THREE.MeshStandardMaterial({ map: lotPatchTex, roughness: 0.76, metalness: 0.04 });
-  const rampFloorMat = new THREE.MeshStandardMaterial({ color: '#545B65', roughness: 0.78, metalness: 0.04 });
+  // 严格对齐 @env-clouds #38 翠绿航拍质感与深石板沥青/自然暖灰路缘规范
+  const arterialMat = new THREE.MeshStandardMaterial({ map: arterialTex, roughness: 0.78, metalness: 0.04 });
+  const arterialFadeMat = createBoundlessArterialFadeMaterial(arterialMat);
+  const campusRoadMat = new THREE.MeshStandardMaterial({ map: campusTex, roughness: 0.78, metalness: 0.04 });
+  const fireRoadMat = new THREE.MeshStandardMaterial({ map: fireTex, roughness: 0.78, metalness: 0.04 });
+  const junctionMat = new THREE.MeshStandardMaterial({ map: junctionTex, roughness: 0.78, metalness: 0.04 });
+  const lotPatchMat = new THREE.MeshStandardMaterial({ map: lotPatchTex, roughness: 0.78, metalness: 0.04 });
+  const rampFloorMat = new THREE.MeshStandardMaterial({ color: '#4C535D', roughness: 0.78, metalness: 0.04 });
   const pathMat = new THREE.MeshStandardMaterial({ map: walkwayTex, roughness: 0.72, metalness: 0.03 });
   const plazaMat = new THREE.MeshStandardMaterial({ map: plazaTex, roughness: 0.72, metalness: 0.03 });
-  const curbMat = new THREE.MeshStandardMaterial({ color: '#C5BEB3', roughness: 0.68, metalness: 0.03 });
-  const crosswalkMat = new THREE.MeshStandardMaterial({ color: '#EAE6DE', roughness: 0.74, metalness: 0.02 });
-  const wheelStopMat = new THREE.MeshStandardMaterial({ color: '#ADA69B', roughness: 0.66, metalness: 0.05 });
+  const curbMat = new THREE.MeshStandardMaterial({ color: '#BDB8AE', roughness: 0.68, metalness: 0.03 });
+  const crosswalkMat = new THREE.MeshStandardMaterial({ color: '#E6E2DA', roughness: 0.74, metalness: 0.02 });
+  const wheelStopMat = new THREE.MeshStandardMaterial({ color: '#A6A096', roughness: 0.66, metalness: 0.05 });
 
   const satinClayMat = new THREE.MeshStandardMaterial({ color: '#D2CCC3', roughness: 0.42, metalness: 0.06 });
   const darkGraphiteMat = new THREE.MeshStandardMaterial({ color: '#333840', roughness: 0.38, metalness: 0.65 });
@@ -1470,13 +1630,20 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
     roughness: 0.4,
   });
 
-  // 共享各主干道与内部环道样条控制点
+  // 共享各主干道与内部环道样条控制点（核心点保留原位供 64 盏路灯与动态车流精确对齐，外围主干道沿切线无界延展 ~220m）
   const zhongguancunPts = [
     [-208, -184],
     [-211, -92],
     [-216, 15],
     [-221, 110],
     [-224, 184],
+  ];
+  const zhongguancunExtendedPts = [
+    [-201, -404],
+    [-205, -294],
+    ...zhongguancunPts,
+    [-228, 294],
+    [-233, 404],
   ];
   const pinglingPts = [
     [-243, -100],
@@ -1486,12 +1653,26 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
     [65, -162],
     [164, -184],
   ];
+  const pinglingExtendedPts = [
+    [-459, -59],
+    [-351, -80],
+    ...pinglingPts,
+    [272, -208],
+    [379, -232],
+  ];
   const yongpingPts = [
     [-243, 114],
     [-221, 122],
     [-186, 138],
     [-138, 164],
     [-94, 184],
+  ];
+  const yongpingExtendedPts = [
+    [-450, 39],
+    [-346, 76],
+    ...yongpingPts,
+    [6, 230],
+    [106, 275],
   ];
   const fireRingPts = [
     [-210, -66],
@@ -1561,47 +1742,56 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
     // 西侧停车场入口引道东侧开口 (z ∈ [-14.8, -5.2])
     (x > -145.0 && z > -15.0 && z < -5.0);
 
-  // 1. 西侧市政主干道：中关村大道（严格钳制在底座内框内）
+  // 1. 西侧市政主干道：中关村大道（无界延展至南北云雾边界，核心段不透明实心，路缘 d_out <= 32m 平滑收尾）
   group.add(
     buildExtrudedRoadRibbon({
-      controlPoints: zhongguancunPts,
+      controlPoints: zhongguancunExtendedPts,
       width: 17.5,
       topY: ROAD_Y.ZGC,
       curbTopY: ROAD_Y.ZGC_CURB,
-      segments: 64,
+      segments: 140,
       uvTileLength: 20,
       roadMaterial: arterialMat,
+      fadeRoadMaterial: arterialFadeMat,
       curbMaterial: curbMat,
+      clampToPlinth: false,
+      curbMaxOutDist: 32,
       curbSuppressFn: zgcSuppress,
     })
   );
 
-  // 2. 北侧市政主干道：平陵西路
+  // 2. 北侧市政主干道：平陵西路（无界延展至东西云雾边界）
   group.add(
     buildExtrudedRoadRibbon({
-      controlPoints: pinglingPts,
+      controlPoints: pinglingExtendedPts,
       width: 15.5,
       topY: ROAD_Y.PINGLING,
       curbTopY: ROAD_Y.PINGLING_CURB,
-      segments: 64,
+      segments: 140,
       uvTileLength: 20,
       roadMaterial: arterialMat,
+      fadeRoadMaterial: arterialFadeMat,
       curbMaterial: curbMat,
+      clampToPlinth: false,
+      curbMaxOutDist: 32,
       curbSuppressFn: pinglingSuppress,
     })
   );
 
-  // 3. 西南市政主干道：永平大道
+  // 3. 西南市政主干道：永平大道（无界延展至西南与东南云雾边界）
   group.add(
     buildExtrudedRoadRibbon({
-      controlPoints: yongpingPts,
+      controlPoints: yongpingExtendedPts,
       width: 15.0,
       topY: ROAD_Y.YONGPING,
       curbTopY: ROAD_Y.YONGPING_CURB,
-      segments: 48,
+      segments: 128,
       uvTileLength: 20,
       roadMaterial: arterialMat,
+      fadeRoadMaterial: arterialFadeMat,
       curbMaterial: curbMat,
+      clampToPlinth: false,
+      curbMaxOutDist: 32,
       curbSuppressFn: yongpingSuppress,
     })
   );
@@ -1672,7 +1862,7 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
   plazaBox.receiveShadow = true;
   group.add(plazaBox);
 
-  // 中央精工倒角暖石种植岛（鼠尾草绿缎面草坪，取代苍白浅灰）
+  // 中央精工倒角暖石种植岛（健康翠绿草坪，与 @env-clouds #38 无缝对齐）
   const islandCurb = new THREE.Mesh(new THREE.CylinderGeometry(3.26, 3.44, 0.22, 28), curbMat);
   islandCurb.scale.set(1.0, 1, 2.72);
   islandCurb.position.set(26, 0.11, -112);
@@ -1681,7 +1871,7 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
 
   const islandTurf = new THREE.Mesh(
     new THREE.CylinderGeometry(2.86, 2.94, 0.25, 28),
-    new THREE.MeshStandardMaterial({ color: '#7E9A74', roughness: 0.84, metalness: 0.0 })
+    new THREE.MeshStandardMaterial({ color: '#417836', roughness: 0.85, metalness: 0.0 })
   );
   islandTurf.scale.set(1.0, 1, 2.62);
   islandTurf.position.set(26, 0.125, -112);
