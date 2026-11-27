@@ -120,7 +120,7 @@ export function sampleGroundElevation(x, z) {
 }
 
 /**
- * 极轻量内联暖灰褐色软接触阴影圆盘纹理（Art Spec #9：#2C2824 柔化 AO，零硬边，不依赖新增外部导出）
+ * 极轻量内联深森影软接触阴影圆盘纹理（深润柔和 AO，零硬边，适配日光绿地与暖石广场）
  */
 function createContactShadowTexture() {
   const size = 64;
@@ -130,10 +130,10 @@ function createContactShadowTexture() {
   const ctx = canvas.getContext('2d');
   const half = size * 0.5;
   const grad = ctx.createRadialGradient(half, half, 0, half, half, half);
-  grad.addColorStop(0.0, 'rgba(44, 40, 36, 0.42)');
-  grad.addColorStop(0.45, 'rgba(44, 40, 36, 0.24)');
-  grad.addColorStop(0.75, 'rgba(44, 40, 36, 0.08)');
-  grad.addColorStop(1.0, 'rgba(44, 40, 36, 0.0)');
+  grad.addColorStop(0.0, 'rgba(20, 30, 22, 0.46)');
+  grad.addColorStop(0.45, 'rgba(20, 30, 22, 0.26)');
+  grad.addColorStop(0.75, 'rgba(20, 30, 22, 0.09)');
+  grad.addColorStop(1.0, 'rgba(20, 30, 22, 0.0)');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, size, size);
 
@@ -168,17 +168,11 @@ function buildSculptedSWHillPark(mats, warmAccentMat, landmarkPoolMat) {
   const segs = 64;
 
   const positions = [];
-  const colors = [];
+  const rawHeights = [];
   const indices = [];
 
-  // 对齐 Art Spec #9：丰润缎面鼠尾草绿到橄榄绿微阶梯渐变（无泛白）
-  const colLow = new THREE.Color('#7e9974');
-  const colMid = new THREE.Color('#6c8762');
-  const colHigh = new THREE.Color('#86a07a');
-  const tmpCol = new THREE.Color();
-
   positions.push(cx, height, cz);
-  colors.push(colHigh.r, colHigh.g, colHigh.b);
+  rawHeights.push(height);
 
   for (let r = 1; r <= rings; r++) {
     const rad = (r / rings) * meshRadius;
@@ -190,16 +184,7 @@ function buildSculptedSWHillPark(mats, warmAccentMat, landmarkPoolMat) {
       // 外裙低于 3cm 沉入草坪下方 -0.025m，杜绝与 y=0.000 草坪发生共面 Z-Fighting
       const yFinal = wy < 0.03 ? -0.025 : wy;
       positions.push(wx, yFinal, wz);
-
-      const t = wy / height;
-      const contourLine =
-        Math.abs(((wy / 1.15) % 1) - 0.5) < 0.065 && wy > 0.25 && wy < height - 0.25 ? -0.045 : 0;
-      tmpCol.copy(colLow).lerp(colMid, Math.min(1, t * 1.35)).lerp(colHigh, Math.max(0, t * 1.4 - 0.55));
-      colors.push(
-        Math.max(0, tmpCol.r + contourLine),
-        Math.max(0, tmpCol.g + contourLine),
-        Math.max(0, tmpCol.b + contourLine)
-      );
+      rawHeights.push(wy);
     }
   }
 
@@ -219,9 +204,54 @@ function buildSculptedSWHillPark(mats, warmAccentMat, landmarkPoolMat) {
 
   const hillGeo = new THREE.BufferGeometry();
   hillGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  hillGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   hillGeo.setIndex(indices);
   hillGeo.computeVertexNormals();
+
+  // 丰茂健康叶绿素翡翠绿微地形着色（#407735 坡脚无缝融坪 -> #3b7232 -> #2c5d28 -> #54903e 日照翠顶 + 自然向阳坡面光影）
+  const colLawnBase = new THREE.Color('#407735');
+  const colLow = new THREE.Color('#3b7232');
+  const colMid = new THREE.Color('#2c5d28');
+  const colHigh = new THREE.Color('#54903e');
+  const colSunlit = new THREE.Color('#629f46');
+  const sunDir = new THREE.Vector3(-265, 205, 165).normalize();
+  const tmpCol = new THREE.Color();
+
+  const posAttr = hillGeo.attributes.position;
+  const normAttr = hillGeo.attributes.normal;
+  const colors = new Float32Array(posAttr.count * 3);
+
+  for (let i = 0; i < posAttr.count; i++) {
+    const vx = posAttr.getX(i);
+    const vz = posAttr.getZ(i);
+    const wy = rawHeights[i];
+    const t = Math.max(0, Math.min(1, wy / height));
+    const baseBlend = smoothstep(0.0, 0.14, t);
+
+    tmpCol.copy(colLawnBase).lerp(colLow, baseBlend);
+    tmpCol.lerp(colMid, Math.min(1, t * 1.35) * baseBlend);
+    tmpCol.lerp(colHigh, Math.max(0, t * 1.45 - 0.48));
+
+    const sunDot = Math.max(
+      0,
+      Math.min(1, normAttr.getX(i) * sunDir.x + normAttr.getY(i) * sunDir.y + normAttr.getZ(i) * sunDir.z)
+    );
+    const sunLift = smoothstep(0.42, 0.88, sunDot) * smoothstep(0.12, 0.85, t) * 0.24;
+    const shadeDip = (1.0 - smoothstep(0.18, 0.56, sunDot)) * baseBlend * 0.10;
+    const meadowPatch = (Math.sin(vx * 0.11 + vz * 0.08) * 0.55 + Math.cos(vx * 0.07 - vz * 0.13) * 0.45) * 0.055 * baseBlend;
+
+    tmpCol.lerp(colSunlit, sunLift);
+    tmpCol.multiplyScalar(1.0 - shadeDip + meadowPatch);
+
+    // 细腻等高线压暗（保持线性色域色相不偏色，不裁切 R/B 通道）
+    if (wy > 0.35 && wy < height - 0.3 && Math.abs(((wy / 1.15) % 1) - 0.5) < 0.062) {
+      tmpCol.multiplyScalar(0.87);
+    }
+
+    colors[i * 3] = tmpCol.r;
+    colors[i * 3 + 1] = tmpCol.g;
+    colors[i * 3 + 2] = tmpCol.b;
+  }
+  hillGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
   const hillMesh = new THREE.Mesh(
     hillGeo,
@@ -229,6 +259,7 @@ function buildSculptedSWHillPark(mats, warmAccentMat, landmarkPoolMat) {
       vertexColors: true,
       roughness: 0.86,
       metalness: 0.0,
+      envMapIntensity: 0.85,
     })
   );
   hillMesh.receiveShadow = true;
@@ -438,14 +469,8 @@ function buildSculptedLongpanMountain() {
   const segX = 36;
   const segZ = 76;
   const positions = [];
-  const colors = [];
+  const rawHeights = [];
   const indices = [];
-
-  // 对齐 Art Spec #9：鼠尾草绿过渡至深橄榄苔绿，配立体等高线暗沟
-  const colLow = new THREE.Color('#7e9974');
-  const colMid = new THREE.Color('#69845f');
-  const colHigh = new THREE.Color('#7e9772');
-  const tmpCol = new THREE.Color();
 
   for (let iz = 0; iz <= segZ; iz++) {
     const vz = iz / segZ;
@@ -470,15 +495,7 @@ function buildSculptedLongpanMountain() {
       const y = sampleLongpanHeight(x, z);
       const yFinal = y < 0.04 ? -0.025 : y;
       positions.push(x, yFinal, z);
-
-      const t = Math.min(1, y / 22.0);
-      const contour = y > 0.3 && Math.abs(((y / 1.85) % 1) - 0.5) < 0.07 ? -0.064 : 0;
-      tmpCol.copy(colLow).lerp(colMid, Math.min(1, t * 1.45)).lerp(colHigh, Math.max(0, t * 1.55 - 0.6));
-      colors.push(
-        Math.max(0, tmpCol.r + contour),
-        Math.max(0, tmpCol.g + contour),
-        Math.max(0, tmpCol.b + contour)
-      );
+      rawHeights.push(y);
     }
   }
 
@@ -494,9 +511,54 @@ function buildSculptedLongpanMountain() {
 
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   geo.setIndex(indices);
   geo.computeVertexNormals();
+
+  // 丰茂健康翡翠森林绿龙蟠山着色（#407735 坡脚无缝融坪 -> #3b7232 -> #2c5d28 深谷苔绿 -> #54903e 晴翠山脊 + 自然坡向光影）
+  const colLawnBase = new THREE.Color('#407735');
+  const colLow = new THREE.Color('#3b7232');
+  const colMid = new THREE.Color('#2c5d28');
+  const colHigh = new THREE.Color('#54903e');
+  const colSunlit = new THREE.Color('#629f46');
+  const sunDir = new THREE.Vector3(-265, 205, 165).normalize();
+  const tmpCol = new THREE.Color();
+
+  const posAttr = geo.attributes.position;
+  const normAttr = geo.attributes.normal;
+  const colors = new Float32Array(posAttr.count * 3);
+
+  for (let i = 0; i < posAttr.count; i++) {
+    const vx = posAttr.getX(i);
+    const vz = posAttr.getZ(i);
+    const y = rawHeights[i];
+    const t = Math.max(0, Math.min(1, y / 22.0));
+    const baseBlend = smoothstep(0.0, 0.10, t);
+
+    tmpCol.copy(colLawnBase).lerp(colLow, baseBlend);
+    tmpCol.lerp(colMid, Math.min(1, t * 1.45) * baseBlend);
+    tmpCol.lerp(colHigh, Math.max(0, t * 1.55 - 0.55));
+
+    const sunDot = Math.max(
+      0,
+      Math.min(1, normAttr.getX(i) * sunDir.x + normAttr.getY(i) * sunDir.y + normAttr.getZ(i) * sunDir.z)
+    );
+    const sunLift = smoothstep(0.42, 0.88, sunDot) * smoothstep(0.10, 0.80, t) * 0.26;
+    const shadeDip = (1.0 - smoothstep(0.16, 0.54, sunDot)) * baseBlend * 0.12;
+    const forestPatch = (Math.sin(vx * 0.065 + vz * 0.048) * 0.55 + Math.cos(vx * 0.042 - vz * 0.075) * 0.45) * 0.065 * baseBlend;
+
+    tmpCol.lerp(colSunlit, sunLift);
+    tmpCol.multiplyScalar(1.0 - shadeDip + forestPatch);
+
+    // 柔和山体等高线暗沟（线性比例压暗，色相饱满清透）
+    if (y > 0.45 && Math.abs(((y / 1.85) % 1) - 0.5) < 0.068) {
+      tmpCol.multiplyScalar(0.85);
+    }
+
+    colors[i * 3] = tmpCol.r;
+    colors[i * 3 + 1] = tmpCol.g;
+    colors[i * 3 + 2] = tmpCol.b;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
   const mesh = new THREE.Mesh(
     geo,
@@ -504,6 +566,7 @@ function buildSculptedLongpanMountain() {
       vertexColors: true,
       roughness: 0.86,
       metalness: 0.0,
+      envMapIntensity: 0.85,
     })
   );
   mesh.receiveShadow = true;
@@ -1621,11 +1684,14 @@ export function buildTerrainAndStructures(maxAnisotropy = 8) {
   const teakTex = createTeakDeckTexture(maxAnisotropy);
   const contactAoTex = createContactShadowTexture();
 
-  // 核心材质库（100% 对齐 Art Spec #9，无刺眼泛白，贴图材质保持白色乘子以精准还原升级后程序化贴图色阶）
+  // 核心材质库（100% 对齐无边界云雾绿野规范 #38：与外围无界草坪共用完全一致的材质参数、色阶与世界 UV）
   const lawnMat = new THREE.MeshStandardMaterial({
+    name: 'CampusLawnEmerald',
+    color: '#ffffff',
     map: lawnTex,
-    roughness: 0.84,
+    roughness: 0.85,
     metalness: 0.0,
+    envMapIntensity: 0.85,
   });
   const teakMat = new THREE.MeshStandardMaterial({
     map: teakTex,
@@ -1657,13 +1723,14 @@ export function buildTerrainAndStructures(maxAnisotropy = 8) {
   const contactAoMat = new THREE.MeshBasicMaterial({
     map: contactAoTex,
     transparent: true,
-    opacity: 0.72,
+    opacity: 0.76,
     depthWrite: false,
     polygonOffset: true,
     polygonOffsetFactor: -1,
   });
 
-  // 1. 精确对齐 y = 0.000 的丰润鼠尾草绿微缩草坪（精准抠除湖盆 + 1BF 车库坡道井口）
+  // 1. 精确平齐 y = 0.000 的无边界健康翡翠绿主草坪（纯顶面 ShapeGeometry 零垂向裙壁，精准抠除湖盆 + 1BF 车库坡道井口，
+  //    与外围无界大地共享 ±243×±184 (r=26) 24 段圆角边界与世界 UV u=(x+243)/486, v=(z+184)/368，100% 无缝衔接）
   const lawnShape = createRoundedRectShape(PLINTH_CONFIG.width, PLINTH_CONFIG.depth, PLINTH_CONFIG.cornerRadius);
   const lakeHole = new THREE.Path();
   lakeHole.moveTo(LAKE_SHORELINE[0][0], -LAKE_SHORELINE[0][1]);
@@ -1681,12 +1748,7 @@ export function buildTerrainAndStructures(maxAnisotropy = 8) {
   rampHole.closePath();
   lawnShape.holes.push(rampHole);
 
-  const lawnDepth = 3.6;
-  const lawnGeo = new THREE.ExtrudeGeometry(lawnShape, {
-    depth: lawnDepth,
-    bevelEnabled: false,
-    curveSegments: 20,
-  });
+  const lawnGeo = new THREE.ShapeGeometry(lawnShape, 24);
   lawnGeo.rotateX(-Math.PI / 2);
   const lPos = lawnGeo.attributes.position;
   const lUv = new Float32Array(lPos.count * 2);
@@ -1697,8 +1759,10 @@ export function buildTerrainAndStructures(maxAnisotropy = 8) {
   lawnGeo.setAttribute('uv', new THREE.BufferAttribute(lUv, 2));
 
   const lawnMesh = new THREE.Mesh(lawnGeo, lawnMat);
-  lawnMesh.position.y = ELEVATIONS.LAWN_TOP - lawnDepth;
+  lawnMesh.name = 'InnerCampusEmeraldLawn';
+  lawnMesh.position.y = ELEVATIONS.LAWN_TOP;
   lawnMesh.receiveShadow = true;
+  lawnMesh.castShadow = false;
   group.add(lawnMesh);
 
   // 2. L8 修复：北侧对称下沉倒角暖石迎宾镜面水池（水体 y=0.20 真正下沉于 0.28 石材压顶之下！）+ 丰润深鼠尾草修剪绿篱
@@ -1732,16 +1796,16 @@ export function buildTerrainAndStructures(maxAnisotropy = 8) {
 
   const poolCopingMat = new THREE.MeshStandardMaterial({ color: '#b9b2a7', roughness: 0.56, metalness: 0.05 });
   const poolBevelMat = new THREE.MeshStandardMaterial({ color: '#cfc8bd', roughness: 0.48, metalness: 0.05 });
-  const poolBasinFloorMat = new THREE.MeshStandardMaterial({ color: '#1b3d46', roughness: 0.88, metalness: 0.04 });
-  const dayMirrorCol = new THREE.Color('#235c68');
-  const nightMirrorCol = new THREE.Color('#102a44');
+  const poolBasinFloorMat = new THREE.MeshStandardMaterial({ color: '#0d2832', roughness: 0.88, metalness: 0.04 });
+  const dayMirrorCol = new THREE.Color('#184654');
+  const nightMirrorCol = new THREE.Color('#0c233a');
   const mirrorWaterMat = new THREE.MeshStandardMaterial({
-    color: '#235c68',
-    emissive: new THREE.Color('#143550'),
+    color: '#184654',
+    emissive: new THREE.Color('#0f2c44'),
     emissiveIntensity: 0.0,
-    roughness: 0.06,
-    metalness: 0.22,
-    envMapIntensity: 1.55,
+    roughness: 0.05,
+    metalness: 0.24,
+    envMapIntensity: 1.65,
   });
   const mirrorWarmReflectMat = new THREE.MeshBasicMaterial({
     map: landmarkPoolTex,
@@ -1752,8 +1816,18 @@ export function buildTerrainAndStructures(maxAnisotropy = 8) {
     blending: THREE.AdditiveBlending,
     visible: false,
   });
-  const hedgeDeepMat = new THREE.MeshStandardMaterial({ color: '#45644a', roughness: 0.82, metalness: 0.0 });
-  const hedgeCrownMat = new THREE.MeshStandardMaterial({ color: '#567657', roughness: 0.8, metalness: 0.0 });
+  const hedgeDeepMat = new THREE.MeshStandardMaterial({
+    color: '#204d26',
+    roughness: 0.82,
+    metalness: 0.0,
+    envMapIntensity: 0.85,
+  });
+  const hedgeCrownMat = new THREE.MeshStandardMaterial({
+    color: '#357232',
+    roughness: 0.80,
+    metalness: 0.0,
+    envMapIntensity: 0.85,
+  });
 
   for (const side of [-1, 1]) {
     const px = 26 + side * 15.8;
@@ -1891,11 +1965,11 @@ export function buildTerrainAndStructures(maxAnisotropy = 8) {
 
       teakMat.emissiveIntensity = dusk * 0.12 + night * 0.08;
 
-      // 北侧对称迎宾镜面水池：深玉青日间 -> 深邃夜蓝金属微反光 + 暖金倒影微辉
+      // 北侧对称迎宾镜面水池：深青碧航拍镜面日间 -> 深邃夜蓝金属微反光 + 暖金倒影微辉
       const mirrorT = Math.min(1, dusk * 0.72 + night * 0.28);
       mirrorWaterMat.color.lerpColors(dayMirrorCol, nightMirrorCol, mirrorT);
-      mirrorWaterMat.metalness = 0.22 + mirrorT * 0.36;
-      mirrorWaterMat.envMapIntensity = 1.55 + dusk * 0.65 + night * 0.65;
+      mirrorWaterMat.metalness = 0.24 + mirrorT * 0.34;
+      mirrorWaterMat.envMapIntensity = 1.65 + dusk * 0.55 + night * 0.55;
       mirrorWaterMat.emissiveIntensity = dusk * 0.36 + night * 0.28;
       mirrorWarmReflectMat.visible = glowOn;
       mirrorWarmReflectMat.opacity = dusk * 0.18 + night * 0.14;
@@ -1904,7 +1978,7 @@ export function buildTerrainAndStructures(maxAnisotropy = 8) {
       landmarkPoolMat.opacity = dusk * 0.38 + night * 0.22;
 
       // 夜间轻微减弱日间接触 AO，避免与地面羽化光池打架
-      contactAoMat.opacity = THREE.MathUtils.lerp(0.72, 0.28, dusk);
+      contactAoMat.opacity = THREE.MathUtils.lerp(0.76, 0.28, dusk);
     },
   };
 }
