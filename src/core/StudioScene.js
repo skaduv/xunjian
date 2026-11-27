@@ -29,6 +29,12 @@ export class StudioScene {
     this.dayBackdrop = createStudioBackdropTexture('day');
     this.duskBackdrop = createStudioBackdropTexture('dusk');
     this.nightBackdrop = createStudioBackdropTexture('night');
+    for (const bg of [this.dayBackdrop, this.duskBackdrop, this.nightBackdrop]) {
+      if (!bg) continue;
+      bg.generateMipmaps = false;
+      bg.minFilter = THREE.LinearFilter;
+      bg.magFilter = THREE.LinearFilter;
+    }
     this.scene.background = this.dayBackdrop;
 
     this.renderer = new THREE.WebGLRenderer({
@@ -38,7 +44,7 @@ export class StudioScene {
       logarithmicDepthBuffer: false,
     });
     this.renderer.setSize(this.width, this.height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    this.renderer.setPixelRatio(this._computeOptimalPixelRatio());
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.shadowMap.autoUpdate = false;
@@ -87,6 +93,9 @@ export class StudioScene {
     this._tmpProj = new THREE.Vector3();
     this._lastCamPos = this.camera.position.clone();
     this._lastTarget = this.controls.target.clone();
+    this._shadowLerpFrameCount = 0;
+    this._lastShadowMixDusk = 0;
+    this._lastShadowMixNight = 0;
     this.activeUntil = performance.now() + 1800;
 
     this.controls.addEventListener('start', () => {
@@ -99,6 +108,14 @@ export class StudioScene {
 
     this._onResize = this._handleResize.bind(this);
     window.addEventListener('resize', this._onResize);
+  }
+
+  _computeOptimalPixelRatio() {
+    const rawDpr = window.devicePixelRatio || 1;
+    const basePixels = Math.max(1, this.width * this.height);
+    const budgetDpr = Math.sqrt(4_800_000 / basePixels);
+    // 1080p 维持 <= 1.5 锐度，4K (3840×2160) 自动锁定 DPR=1.0 避免暴涨至 5760×3240 爆显存
+    return Math.min(rawDpr, 1.5, Math.max(1.0, budgetDpr));
   }
 
   wake(durationMs = 800) {
@@ -121,13 +138,12 @@ export class StudioScene {
     this.wake(500);
   }
 
-  _buildHighContrastStudioEnv() {
+  _createEnvRenderTarget(mode) {
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     pmrem.compileEquirectangularShader();
 
     const roomGeo = new THREE.BoxGeometry(120, 80, 120);
-    const floorGeo = new THREE.PlaneGeometry(118, 118);
-    const disposables = [roomGeo, floorGeo];
+    const disposables = [roomGeo];
 
     const addSoftboxes = (targetScene, boxes) => {
       boxes.forEach((box) => {
@@ -144,98 +160,124 @@ export class StudioScene {
       });
     };
 
-    // 1. 白昼航拍生态天光环境贴图（深翠林地吸光底面 + 清透云雾天穹 + 斜射暖金日光高光带，赋予水面/玻璃真实航拍天光倒影）
     const envScene = new THREE.Scene();
-    envScene.background = new THREE.Color('#6f8984');
 
-    const roomMat = new THREE.MeshBasicMaterial({
-      color: '#768f8b',
-      side: THREE.BackSide,
-    });
-    envScene.add(new THREE.Mesh(roomGeo, roomMat));
-    disposables.push(roomMat);
+    if (mode === 'dusk') {
+      // 2. 暮光黄金时刻环境贴图（深靛蓝穹顶 + 暖琥珀夕照地平线 + 冰青建筑边缘反光）
+      envScene.background = new THREE.Color('#101928');
+      const duskRoomMat = new THREE.MeshBasicMaterial({
+        color: '#121c2c',
+        side: THREE.BackSide,
+      });
+      envScene.add(new THREE.Mesh(roomGeo, duskRoomMat));
+      disposables.push(duskRoomMat);
 
-    // 深翡翠森林吸光底板（为树冠底面、建筑挑檐与玻璃下部注入浓郁生态暗绿环境反射，彻底告别发白发灰）
-    const darkFloorMat = new THREE.MeshBasicMaterial({
-      color: '#172d1a',
-      side: THREE.DoubleSide,
-    });
-    const darkFloor = new THREE.Mesh(floorGeo, darkFloorMat);
-    darkFloor.rotation.x = -Math.PI / 2;
-    darkFloor.position.y = -39.4;
-    envScene.add(darkFloor);
-    disposables.push(darkFloorMat);
+      addSoftboxes(envScene, [
+        { pos: [-18, 35, 16], rot: [Math.PI / 2, 0, 0.2], size: [54, 14], color: '#6b9ce0', intensity: 1.65 },
+        { pos: [-48, 13, 24], rot: [0, Math.PI / 2, 0], size: [54, 8], color: '#ff9b5a', intensity: 2.05 },
+        { pos: [48, 14, -18], rot: [0, -Math.PI / 2, 0], size: [48, 7], color: '#4784d4', intensity: 1.35 },
+        { pos: [12, 12, -48], rot: [0.18, 0, 0], size: [56, 6], color: '#4cd2ef', intensity: 1.15 },
+      ]);
+    } else if (mode === 'night') {
+      // 3. 专属星夜环境贴图（深蓝黑天穹 + 银蓝月光柔箱 + 低位暖金地平线反光，让夜湖与幕墙折射真实夜景高光）
+      envScene.background = new THREE.Color('#040812');
+      const nightRoomMat = new THREE.MeshBasicMaterial({
+        color: '#050b18',
+        side: THREE.BackSide,
+      });
+      envScene.add(new THREE.Mesh(roomGeo, nightRoomMat));
+      disposables.push(nightRoomMat);
 
-    // 明亮云雾天穹顶面（赋予湖泊与幕墙通透清亮的蓝白航拍天光镜面光泽）
-    const ceilMat = new THREE.MeshBasicMaterial({
-      color: '#c8dcdc',
-      side: THREE.DoubleSide,
-    });
-    const ceilPlane = new THREE.Mesh(floorGeo, ceilMat);
-    ceilPlane.rotation.x = Math.PI / 2;
-    ceilPlane.position.y = 39.4;
-    envScene.add(ceilPlane);
-    disposables.push(ceilMat);
+      addSoftboxes(envScene, [
+        { pos: [-22, 36, 20], rot: [Math.PI / 2, 0, 0.2], size: [54, 14], color: '#8ab8ff', intensity: 2.1 },
+        { pos: [44, 14, 24], rot: [0, -Math.PI / 2, 0], size: [52, 6], color: '#ffbe6b', intensity: 1.55 },
+        { pos: [-44, 12, -20], rot: [0, Math.PI / 2, 0], size: [48, 6], color: '#ffba66', intensity: 1.35 },
+        { pos: [8, 10, -48], rot: [0.15, 0, 0], size: [58, 5], color: '#58d4ff', intensity: 1.2 },
+        { pos: [0, 12, 48], rot: [-0.15, 0, 0], size: [58, 5], color: '#ffca7a', intensity: 1.25 },
+      ]);
+    } else {
+      // 1. 白昼航拍生态天光环境贴图（深翠林地吸光底面 + 清透云雾天穹 + 斜射暖金日光高光带，赋予水面/玻璃真实航拍天光倒影）
+      const floorGeo = new THREE.PlaneGeometry(118, 118);
+      disposables.push(floorGeo);
 
-    addSoftboxes(envScene, [
-      // 斜射暖金航拍主太阳高光带（对齐低仰角日光方向，点亮草坪叶绿素与树冠向阳面）
-      { pos: [-34, 30, 22], rot: [Math.PI / 2.6, 0.32, 0.2], size: [52, 16], color: '#fff4dc', intensity: 3.05 },
-      // 顶部晴空薄云天顶反射面（为湖水与玻璃屋面提供自然柔亮天空高光）
-      { pos: [4, 36, -6], rot: [Math.PI / 2, 0, 0], size: [64, 24], color: '#eaf5f6', intensity: 1.95 },
-      // 东北侧清透蔚蓝天光补光反射条（在阴影暗面注入高级冷调深度）
-      { pos: [48, 22, -24], rot: [0, -Math.PI / 2, 0], size: [52, 12], color: '#b4daf2', intensity: 1.55 },
-      // 远景云雾地平线微亮勾边
-      { pos: [10, 14, -48], rot: [0.18, 0, 0], size: [60, 10], color: '#e4eeea', intensity: 1.45 },
-      // 极轻柔湖畔翠青水光反射
-      { pos: [0, -18, 44], rot: [-0.22, 0, 0], size: [44, 5], color: '#3a7a6a', intensity: 0.42 },
-    ]);
+      envScene.background = new THREE.Color('#6f8984');
+      const roomMat = new THREE.MeshBasicMaterial({
+        color: '#768f8b',
+        side: THREE.BackSide,
+      });
+      envScene.add(new THREE.Mesh(roomGeo, roomMat));
+      disposables.push(roomMat);
+
+      // 深翡翠森林吸光底板（为树冠底面、建筑挑檐与玻璃下部注入浓郁生态暗绿环境反射，彻底告别发白发灰）
+      const darkFloorMat = new THREE.MeshBasicMaterial({
+        color: '#172d1a',
+        side: THREE.DoubleSide,
+      });
+      const darkFloor = new THREE.Mesh(floorGeo, darkFloorMat);
+      darkFloor.rotation.x = -Math.PI / 2;
+      darkFloor.position.y = -39.4;
+      envScene.add(darkFloor);
+      disposables.push(darkFloorMat);
+
+      // 明亮云雾天穹顶面（赋予湖泊与幕墙通透清亮的蓝白航拍天光镜面光泽）
+      const ceilMat = new THREE.MeshBasicMaterial({
+        color: '#c8dcdc',
+        side: THREE.DoubleSide,
+      });
+      const ceilPlane = new THREE.Mesh(floorGeo, ceilMat);
+      ceilPlane.rotation.x = Math.PI / 2;
+      ceilPlane.position.y = 39.4;
+      envScene.add(ceilPlane);
+      disposables.push(ceilMat);
+
+      addSoftboxes(envScene, [
+        // 斜射暖金航拍主太阳高光带（对齐低仰角日光方向，点亮草坪叶绿素与树冠向阳面）
+        { pos: [-34, 30, 22], rot: [Math.PI / 2.6, 0.32, 0.2], size: [52, 16], color: '#fff4dc', intensity: 3.05 },
+        // 顶部晴空薄云天顶反射面（为湖水与玻璃屋面提供自然柔亮天空高光）
+        { pos: [4, 36, -6], rot: [Math.PI / 2, 0, 0], size: [64, 24], color: '#eaf5f6', intensity: 1.95 },
+        // 东北侧清透蔚蓝天光补光反射条（在阴影暗面注入高级冷调深度）
+        { pos: [48, 22, -24], rot: [0, -Math.PI / 2, 0], size: [52, 12], color: '#b4daf2', intensity: 1.55 },
+        // 远景云雾地平线微亮勾边
+        { pos: [10, 14, -48], rot: [0.18, 0, 0], size: [60, 10], color: '#e4eeea', intensity: 1.45 },
+        // 极轻柔湖畔翠青水光反射
+        { pos: [0, -18, 44], rot: [-0.22, 0, 0], size: [44, 5], color: '#3a7a6a', intensity: 0.42 },
+      ]);
+    }
 
     const rt = pmrem.fromScene(envScene, 0.04);
-    this.scene.environment = rt.texture;
+    pmrem.dispose();
+    disposables.forEach((d) => d.dispose());
+    return rt;
+  }
+
+  _getEnvRenderTarget(mode) {
+    if (mode === 'night') {
+      if (!this.nightEnvRenderTarget) {
+        this.nightEnvRenderTarget = this._createEnvRenderTarget('night');
+      }
+      return this.nightEnvRenderTarget;
+    }
+    if (mode === 'dusk') {
+      if (!this.duskEnvRenderTarget) {
+        this.duskEnvRenderTarget = this._createEnvRenderTarget('dusk');
+      }
+      return this.duskEnvRenderTarget;
+    }
+    if (!this.envRenderTarget) {
+      this.envRenderTarget = this._createEnvRenderTarget('day');
+    }
+    return this.envRenderTarget;
+  }
+
+  _buildHighContrastStudioEnv() {
+    // P4 懒加载 PMREM：启动时仅构建白昼环境贴图（省 -8MB 显存与首帧编译耗时），暮光/星夜在首次切换时按需生成并缓存
+    this.envRenderTarget = this._createEnvRenderTarget('day');
+    this.duskEnvRenderTarget = null;
+    this.nightEnvRenderTarget = null;
+    this.scene.environment = this.envRenderTarget.texture;
     if ('environmentIntensity' in this.scene) {
       this.scene.environmentIntensity = 0.44;
     }
-    this.envRenderTarget = rt;
-
-    // 2. 暮光黄金时刻环境贴图（深靛蓝穹顶 + 暖琥珀夕照地平线 + 冰青建筑边缘反光）
-    const duskEnvScene = new THREE.Scene();
-    duskEnvScene.background = new THREE.Color('#101928');
-    const duskRoomMat = new THREE.MeshBasicMaterial({
-      color: '#121c2c',
-      side: THREE.BackSide,
-    });
-    duskEnvScene.add(new THREE.Mesh(roomGeo, duskRoomMat));
-    disposables.push(duskRoomMat);
-
-    addSoftboxes(duskEnvScene, [
-      { pos: [-18, 35, 16], rot: [Math.PI / 2, 0, 0.2], size: [54, 14], color: '#6b9ce0', intensity: 1.65 },
-      { pos: [-48, 13, 24], rot: [0, Math.PI / 2, 0], size: [54, 8], color: '#ff9b5a', intensity: 2.05 },
-      { pos: [48, 14, -18], rot: [0, -Math.PI / 2, 0], size: [48, 7], color: '#4784d4', intensity: 1.35 },
-      { pos: [12, 12, -48], rot: [0.18, 0, 0], size: [56, 6], color: '#4cd2ef', intensity: 1.15 },
-    ]);
-    this.duskEnvRenderTarget = pmrem.fromScene(duskEnvScene, 0.04);
-
-    // 3. 专属星夜环境贴图（深蓝黑天穹 + 银蓝月光柔箱 + 低位暖金地平线反光，让夜湖与幕墙折射真实夜景高光）
-    const nightEnvScene = new THREE.Scene();
-    nightEnvScene.background = new THREE.Color('#040812');
-    const nightRoomMat = new THREE.MeshBasicMaterial({
-      color: '#050b18',
-      side: THREE.BackSide,
-    });
-    nightEnvScene.add(new THREE.Mesh(roomGeo, nightRoomMat));
-    disposables.push(nightRoomMat);
-
-    addSoftboxes(nightEnvScene, [
-      { pos: [-22, 36, 20], rot: [Math.PI / 2, 0, 0.2], size: [54, 14], color: '#8ab8ff', intensity: 2.1 },
-      { pos: [44, 14, 24], rot: [0, -Math.PI / 2, 0], size: [52, 6], color: '#ffbe6b', intensity: 1.55 },
-      { pos: [-44, 12, -20], rot: [0, Math.PI / 2, 0], size: [48, 6], color: '#ffba66', intensity: 1.35 },
-      { pos: [8, 10, -48], rot: [0.15, 0, 0], size: [58, 5], color: '#58d4ff', intensity: 1.2 },
-      { pos: [0, 12, 48], rot: [-0.15, 0, 0], size: [58, 5], color: '#ffca7a', intensity: 1.25 },
-    ]);
-    this.nightEnvRenderTarget = pmrem.fromScene(nightEnvScene, 0.04);
-
-    pmrem.dispose();
-    disposables.forEach((d) => d.dispose());
   }
 
   _buildLightingRig() {
@@ -361,12 +403,8 @@ export class StudioScene {
           ? this.duskBackdrop
           : this.dayBackdrop;
 
-    this.scene.environment =
-      normalized === 'night' && this.nightEnvRenderTarget
-        ? this.nightEnvRenderTarget.texture
-        : normalized === 'dusk' && this.duskEnvRenderTarget
-          ? this.duskEnvRenderTarget.texture
-          : this.envRenderTarget.texture;
+    const envRt = this._getEnvRenderTarget(normalized);
+    this.scene.environment = envRt.texture;
 
     if (immediate) {
       this.lightMix.dusk = this.targetMix.dusk;
@@ -377,6 +415,9 @@ export class StudioScene {
       for (const cb of this.duskListeners) cb(this.duskFactor, this.nightFactor);
     }
 
+    this._shadowLerpFrameCount = 0;
+    this._lastShadowMixDusk = this.lightMix.dusk;
+    this._lastShadowMixNight = this.lightMix.night;
     this.markShadowsDirty();
     this.wake(1600);
   }
@@ -460,7 +501,22 @@ export class StudioScene {
       this.duskFactor = Math.min(1, this.lightMix.dusk * 0.68 + this.lightMix.night);
       this.nightFactor = this.lightMix.night;
       this._applyLightingBlend(this.lightMix.dusk, this.lightMix.night);
-      this.markShadowsDirty();
+
+      // P3 阴影刷新节流：昼夜过渡期间每 4 帧或太阳混合变化 >= 0.08 更新一次阴影贴图，收敛时强制终态刷新一次
+      const converged =
+        this.lightMix.dusk === this.targetMix.dusk &&
+        this.lightMix.night === this.targetMix.night;
+      this._shadowLerpFrameCount++;
+      const mixDelta =
+        Math.abs(this.lightMix.dusk - this._lastShadowMixDusk) +
+        Math.abs(this.lightMix.night - this._lastShadowMixNight);
+      if (converged || this._shadowLerpFrameCount >= 4 || mixDelta >= 0.08) {
+        this.markShadowsDirty();
+        this._shadowLerpFrameCount = 0;
+        this._lastShadowMixDusk = this.lightMix.dusk;
+        this._lastShadowMixNight = this.lightMix.night;
+      }
+
       for (const cb of this.duskListeners) cb(this.duskFactor, this.nightFactor);
     }
   }
@@ -521,7 +577,7 @@ export class StudioScene {
     this.camera.aspect = this.width / this.height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(this.width, this.height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    this.renderer.setPixelRatio(this._computeOptimalPixelRatio());
     this.wake(600);
   }
 

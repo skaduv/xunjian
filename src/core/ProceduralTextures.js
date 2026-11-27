@@ -7,6 +7,21 @@ import * as THREE from 'three';
  * - 完整保留 v2.1 1024×512 2:1 锐利 1px 星夜棚拍背景
  */
 
+const textureCache = new Map();
+
+function getOrCreateCachedTexture(key, factory) {
+  const cached = textureCache.get(key);
+  if (cached) return cached;
+  const tex = factory();
+  textureCache.set(key, tex);
+  tex.addEventListener('dispose', () => {
+    if (textureCache.get(key) === tex) {
+      textureCache.delete(key);
+    }
+  });
+  return tex;
+}
+
 function makeCanvas(width, height) {
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -52,46 +67,48 @@ function smoothNoise2d(x, y, period) {
  * 1. 生机盎然的健康叶绿素航拍翡翠草坪（深邃自然 #36662d + 极克制微柔修剪质感 + 细腻有机草绒肌理，零斑马纹零拼缝）
  */
 export function createMowedLawnTexture(maxAnisotropy = 8) {
-  const size = 256;
-  const { canvas, ctx } = makeCanvas(size, size);
+  return getOrCreateCachedTexture(`mowedLawn:${maxAnisotropy}`, () => {
+    const size = 256;
+    const { canvas, ctx } = makeCanvas(size, size);
 
-  const img = ctx.createImageData(size, size);
-  const d = img.data;
-  const baseR = 54; // #36662d 浓郁自然航拍叶绿素翡翠绿（对齐参考图健康深绿草甸）
-  const baseG = 102;
-  const baseB = 45;
-  const stripeCycles = 4; // 整数周期：沿 X/Y 边界严格闭合，彻底消除 tile 接缝
+    const img = ctx.createImageData(size, size);
+    const d = img.data;
+    const baseR = 54; // #36662d 浓郁自然航拍叶绿素翡翠绿（对齐参考图健康深绿草甸）
+    const baseG = 102;
+    const baseB = 45;
+    const stripeCycles = 4; // 整数周期：沿 X/Y 边界严格闭合，彻底消除 tile 接缝
 
-  for (let y = 0; y < size; y++) {
-    const v = y / size;
-    for (let x = 0; x < size; x++) {
-      const u = x / size;
-      const idx = (y * size + x) * 4;
+    for (let y = 0; y < size; y++) {
+      const v = y / size;
+      for (let x = 0; x < size; x++) {
+        const u = x / size;
+        const idx = (y * size + x) * 4;
 
-      // 极克制柔和的 45° 园林修剪微光韵律（彻底消除远近景灯芯绒/斑马条纹感）
-      const phase = (u + v) * Math.PI * 2 * stripeCycles;
-      const stripeWave = Math.sin(phase) * 0.85 + Math.sin(phase * 3) * 0.12;
-      const stripeR = stripeWave * 1.8;
-      const stripeG = stripeWave * 2.4;
-      const stripeB = stripeWave * 1.0;
+        // 极克制柔和的 45° 园林修剪微光韵律（彻底消除远近景灯芯绒/斑马条纹感）
+        const phase = (u + v) * Math.PI * 2 * stripeCycles;
+        const stripeWave = Math.sin(phase) * 0.85 + Math.sin(phase * 3) * 0.12;
+        const stripeR = stripeWave * 1.8;
+        const stripeG = stripeWave * 2.4;
+        const stripeB = stripeWave * 1.0;
 
-      // 全整数周期多尺度柔和草绒层次 + 细腻有机叶丛颗粒
-      const macro = (smoothNoise2d(u * 4, v * 4, 4) - 0.5) * 10.5;
-      const mid = (smoothNoise2d(u * 8 + 1.7, v * 8 + 3.1, 8) - 0.5) * 8.0;
-      const fine = (smoothNoise2d(u * 16 + 4.3, v * 16 + 0.9, 16) - 0.5) * 6.5;
-      const tuft = (smoothNoise2d(u * 32 + 2.1, v * 32 + 5.7, 32) - 0.5) * 5.0;
-      const micro = (hash2d(x, y) - 0.5) * 7.2;
-      const sunPatch = (smoothNoise2d(u * 3 + 0.6, v * 3 + 2.1, 3) - 0.5) * 7.5;
+        // 全整数周期多尺度柔和草绒层次 + 细腻有机叶丛颗粒
+        const macro = (smoothNoise2d(u * 4, v * 4, 4) - 0.5) * 10.5;
+        const mid = (smoothNoise2d(u * 8 + 1.7, v * 8 + 3.1, 8) - 0.5) * 8.0;
+        const fine = (smoothNoise2d(u * 16 + 4.3, v * 16 + 0.9, 16) - 0.5) * 6.5;
+        const tuft = (smoothNoise2d(u * 32 + 2.1, v * 32 + 5.7, 32) - 0.5) * 5.0;
+        const micro = (hash2d(x, y) - 0.5) * 7.2;
+        const sunPatch = (smoothNoise2d(u * 3 + 0.6, v * 3 + 2.1, 3) - 0.5) * 7.5;
 
-      d[idx] = Math.min(255, Math.max(0, Math.round(baseR + stripeR + macro * 0.72 + mid * 0.74 + fine * 0.72 + tuft * 0.7 + micro * 0.68 + sunPatch * 0.88)));
-      d[idx + 1] = Math.min(255, Math.max(0, Math.round(baseG + stripeG + macro * 1.04 + mid * 1.0 + fine * 0.96 + tuft * 0.92 + micro * 0.88 + sunPatch * 0.62)));
-      d[idx + 2] = Math.min(255, Math.max(0, Math.round(baseB + stripeB + macro * 0.52 + mid * 0.56 + fine * 0.56 + tuft * 0.54 + micro * 0.52 - sunPatch * 0.30)));
-      d[idx + 3] = 255;
+        d[idx] = Math.min(255, Math.max(0, Math.round(baseR + stripeR + macro * 0.72 + mid * 0.74 + fine * 0.72 + tuft * 0.7 + micro * 0.68 + sunPatch * 0.88)));
+        d[idx + 1] = Math.min(255, Math.max(0, Math.round(baseG + stripeG + macro * 1.04 + mid * 1.0 + fine * 0.96 + tuft * 0.92 + micro * 0.88 + sunPatch * 0.62)));
+        d[idx + 2] = Math.min(255, Math.max(0, Math.round(baseB + stripeB + macro * 0.52 + mid * 0.56 + fine * 0.56 + tuft * 0.54 + micro * 0.52 - sunPatch * 0.30)));
+        d[idx + 3] = 255;
+      }
     }
-  }
-  ctx.putImageData(img, 0, 0);
+    ctx.putImageData(img, 0, 0);
 
-  return finalizeTexture(canvas, { repeatX: 20, repeatY: 16, srgb: true, anisotropy: maxAnisotropy });
+    return finalizeTexture(canvas, { repeatX: 20, repeatY: 16, srgb: true, anisotropy: maxAnisotropy });
+  });
 }
 
 /**
@@ -318,65 +335,69 @@ export function createWoodLouverTexture(maxAnisotropy = 8) {
  * 6. 温润蜜柚木亲水甲板纹理（清晰深色木板拼缝与丰富木板色差）
  */
 export function createTeakDeckTexture(maxAnisotropy = 8) {
-  const size = 256;
-  const { canvas, ctx } = makeCanvas(size, size);
-  ctx.fillStyle = '#9f764e';
-  ctx.fillRect(0, 0, size, size);
+  return getOrCreateCachedTexture(`teakDeck:${maxAnisotropy}`, () => {
+    const size = 256;
+    const { canvas, ctx } = makeCanvas(size, size);
+    ctx.fillStyle = '#9f764e';
+    ctx.fillRect(0, 0, size, size);
 
-  const planks = 14;
-  const ph = size / planks;
-  for (let i = 0; i < planks; i++) {
-    const tone = (hash2d(i, 5.1) - 0.5) * 18;
-    const r = Math.round(160 + tone);
-    const g = Math.round(118 + tone * 0.85);
-    const b = Math.round(78 + tone * 0.7);
-    ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-    ctx.fillRect(0, i * ph + 1.6, size, ph - 2.0);
+    const planks = 14;
+    const ph = size / planks;
+    for (let i = 0; i < planks; i++) {
+      const tone = (hash2d(i, 5.1) - 0.5) * 18;
+      const r = Math.round(160 + tone);
+      const g = Math.round(118 + tone * 0.85);
+      const b = Math.round(78 + tone * 0.7);
+      ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+      ctx.fillRect(0, i * ph + 1.6, size, ph - 2.0);
 
-    // 细腻木纹丝
-    ctx.fillStyle = 'rgba(72, 48, 28, 0.12)';
-    ctx.fillRect(0, i * ph + ph * 0.42, size, 1);
-    ctx.fillStyle = 'rgba(235, 200, 160, 0.10)';
-    ctx.fillRect(0, i * ph + ph * 0.72, size, 1);
+      // 细腻木纹丝
+      ctx.fillStyle = 'rgba(72, 48, 28, 0.12)';
+      ctx.fillRect(0, i * ph + ph * 0.42, size, 1);
+      ctx.fillStyle = 'rgba(235, 200, 160, 0.10)';
+      ctx.fillRect(0, i * ph + ph * 0.72, size, 1);
 
-    // 深色压缝
-    ctx.fillStyle = 'rgba(54, 38, 24, 0.56)';
-    ctx.fillRect(0, i * ph, size, 1.6);
-  }
-  return finalizeTexture(canvas, { repeatX: 4, repeatY: 4, srgb: true, anisotropy: maxAnisotropy });
+      // 深色压缝
+      ctx.fillStyle = 'rgba(54, 38, 24, 0.56)';
+      ctx.fillRect(0, i * ph, size, 1.6);
+    }
+    return finalizeTexture(canvas, { repeatX: 4, repeatY: 4, srgb: true, anisotropy: maxAnisotropy });
+  });
 }
 
 /**
  * 7. 精工单晶硅光伏阵列纹理（深靛石板蓝晶格 + 拉丝钛铝边框）
  */
 export function createSolarPanelTexture(maxAnisotropy = 8) {
-  const w = 256;
-  const h = 128;
-  const { canvas, ctx } = makeCanvas(w, h);
+  return getOrCreateCachedTexture(`solarPanel:${maxAnisotropy}`, () => {
+    const w = 256;
+    const h = 128;
+    const { canvas, ctx } = makeCanvas(w, h);
 
-  ctx.fillStyle = '#253345';
-  ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#253345';
+    ctx.fillRect(0, 0, w, h);
 
-  ctx.strokeStyle = '#9ea5ae';
-  ctx.lineWidth = 4;
-  ctx.strokeRect(2, 2, w - 4, h - 4);
+    ctx.strokeStyle = '#9ea5ae';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(2, 2, w - 4, h - 4);
 
-  const cols = 8;
-  const rows = 4;
-  const cw = (w - 8) / cols;
-  const rh = (h - 8) / rows;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const x = 4 + c * cw;
-      const y = 4 + r * rh;
-      const v = (hash2d(c, r) - 0.5) * 10;
-      ctx.fillStyle = `rgb(${Math.round(38 + v)}, ${Math.round(52 + v)}, ${Math.round(72 + v)})`;
-      ctx.fillRect(x + 1, y + 1, cw - 2, rh - 2);
-      ctx.fillStyle = 'rgba(182, 204, 224, 0.22)';
-      ctx.fillRect(x + cw * 0.5, y + 1, 1, rh - 2);
+    const cols = 8;
+    const rows = 4;
+    const cw = (w - 8) / cols;
+    const rh = (h - 8) / rows;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const x = 4 + c * cw;
+        const y = 4 + r * rh;
+        const v = (hash2d(c, r) - 0.5) * 10;
+        ctx.fillStyle = `rgb(${Math.round(38 + v)}, ${Math.round(52 + v)}, ${Math.round(72 + v)})`;
+        ctx.fillRect(x + 1, y + 1, cw - 2, rh - 2);
+        ctx.fillStyle = 'rgba(182, 204, 224, 0.22)';
+        ctx.fillRect(x + cw * 0.5, y + 1, 1, rh - 2);
+      }
     }
-  }
-  return finalizeTexture(canvas, { repeatX: 1, repeatY: 1, srgb: true, anisotropy: maxAnisotropy });
+    return finalizeTexture(canvas, { repeatX: 1, repeatY: 1, srgb: true, anisotropy: maxAnisotropy });
+  });
 }
 
 /**
@@ -595,6 +616,9 @@ export function createStudioBackdropTexture(mode = 'day') {
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
+    tex.generateMipmaps = false;
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
     tex.needsUpdate = true;
     return tex;
   }
@@ -621,6 +645,9 @@ export function createStudioBackdropTexture(mode = 'day') {
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
+  tex.generateMipmaps = false;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
   tex.needsUpdate = true;
   return tex;
 }
@@ -655,25 +682,27 @@ export function createFeatheredLightPoolTexture(
   midColor = '255, 174, 72',
   maxAnisotropy = 4
 ) {
-  const size = 128;
-  const { canvas, ctx } = makeCanvas(size, size);
-  const half = size * 0.5;
-  const grad = ctx.createRadialGradient(half, half, 0, half, half, half);
-  grad.addColorStop(0.0, `rgba(${innerColor}, 0.96)`);
-  grad.addColorStop(0.18, `rgba(${innerColor}, 0.72)`);
-  grad.addColorStop(0.42, `rgba(${midColor}, 0.34)`);
-  grad.addColorStop(0.68, `rgba(${midColor}, 0.11)`);
-  grad.addColorStop(0.88, `rgba(${midColor}, 0.025)`);
-  grad.addColorStop(1.0, `rgba(${midColor}, 0.0)`);
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, size, size);
+  return getOrCreateCachedTexture(`featheredLightPool:${innerColor}|${midColor}|${maxAnisotropy}`, () => {
+    const size = 128;
+    const { canvas, ctx } = makeCanvas(size, size);
+    const half = size * 0.5;
+    const grad = ctx.createRadialGradient(half, half, 0, half, half, half);
+    grad.addColorStop(0.0, `rgba(${innerColor}, 0.96)`);
+    grad.addColorStop(0.18, `rgba(${innerColor}, 0.72)`);
+    grad.addColorStop(0.42, `rgba(${midColor}, 0.34)`);
+    grad.addColorStop(0.68, `rgba(${midColor}, 0.11)`);
+    grad.addColorStop(0.88, `rgba(${midColor}, 0.025)`);
+    grad.addColorStop(1.0, `rgba(${midColor}, 0.0)`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
 
-  return finalizeTexture(canvas, {
-    repeatX: 1,
-    repeatY: 1,
-    srgb: true,
-    anisotropy: maxAnisotropy,
-    wrap: THREE.ClampToEdgeWrapping,
+    return finalizeTexture(canvas, {
+      repeatX: 1,
+      repeatY: 1,
+      srgb: true,
+      anisotropy: maxAnisotropy,
+      wrap: THREE.ClampToEdgeWrapping,
+    });
   });
 }
 
@@ -812,22 +841,24 @@ export function createBrushedMetalTexture(baseHex = '#b8b2a8', maxAnisotropy = 8
  * 18. 柔和奶油感接触阴影 AO 圆盘贴图（用于树木、车辆、小品接地接触阴影）
  */
 export function createContactShadowTexture(maxAnisotropy = 4) {
-  const size = 128;
-  const { canvas, ctx } = makeCanvas(size, size);
-  const half = size * 0.5;
-  const grad = ctx.createRadialGradient(half, half, 0, half, half, half);
-  grad.addColorStop(0.0, 'rgba(18, 34, 20, 0.74)');
-  grad.addColorStop(0.38, 'rgba(22, 38, 24, 0.46)');
-  grad.addColorStop(0.72, 'rgba(26, 42, 26, 0.15)');
-  grad.addColorStop(1.0, 'rgba(26, 42, 26, 0.0)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, size, size);
+  return getOrCreateCachedTexture(`contactShadow:${maxAnisotropy}`, () => {
+    const size = 128;
+    const { canvas, ctx } = makeCanvas(size, size);
+    const half = size * 0.5;
+    const grad = ctx.createRadialGradient(half, half, 0, half, half, half);
+    grad.addColorStop(0.0, 'rgba(18, 34, 20, 0.74)');
+    grad.addColorStop(0.38, 'rgba(22, 38, 24, 0.46)');
+    grad.addColorStop(0.72, 'rgba(26, 42, 26, 0.15)');
+    grad.addColorStop(1.0, 'rgba(26, 42, 26, 0.0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
 
-  return finalizeTexture(canvas, {
-    repeatX: 1,
-    repeatY: 1,
-    srgb: true,
-    anisotropy: maxAnisotropy,
-    wrap: THREE.ClampToEdgeWrapping,
+    return finalizeTexture(canvas, {
+      repeatX: 1,
+      repeatY: 1,
+      srgb: true,
+      anisotropy: maxAnisotropy,
+      wrap: THREE.ClampToEdgeWrapping,
+    });
   });
 }
