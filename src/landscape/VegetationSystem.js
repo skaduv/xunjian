@@ -1,15 +1,17 @@
 import * as THREE from 'three';
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {
   BUILDING_WINGS,
   LAKE_SHORELINE,
   PLINTH_CONFIG,
   PORTAL_CANOPIES,
 } from '../config/campusConfig.js';
+import { createContactShadowTexture } from '../core/ProceduralTextures.js';
 import { sampleGroundElevation } from './TerrainAndStructures.js';
 import * as HardwarePlinthModule from '../plinth/HardwarePlinth.js';
 
 /**
- * Lush Healthy Botanical Vegetation & Boundless Outer Woodland System (Full InstancedMesh, ~12 Draw Calls)
+ * Lush Healthy Botanical Vegetation & Boundless Outer Woodland System (2-Tier LOD InstancedMesh, 18 Draw Calls)
  *
  * Visual Direction (aligned with @env-clouds Boundless Cloud-Fade & Healthy-Emerald Spec #38):
  * - Rich, vibrant, alive chlorophyll emerald foliage across campus & boundless outer woodland:
@@ -699,43 +701,18 @@ function sampleTerrainInfo(x, z) {
 }
 
 // ---------------------------------------------------------------------------
-// Procedural Soft Radial Contact AO Disc Texture (inline, zero external deps)
-// ---------------------------------------------------------------------------
-function createContactAOTexture() {
-  if (typeof document === 'undefined') return null;
-  const size = 128;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  const half = size * 0.5;
-  const grad = ctx.createRadialGradient(half, half, 0, half, half, half);
-  grad.addColorStop(0.0, 'rgba(255, 255, 255, 0.94)');
-  grad.addColorStop(0.32, 'rgba(255, 255, 255, 0.70)');
-  grad.addColorStop(0.62, 'rgba(255, 255, 255, 0.30)');
-  grad.addColorStop(0.84, 'rgba(255, 255, 255, 0.07)');
-  grad.addColorStop(1.0, 'rgba(255, 255, 255, 0.0)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, size, size);
-
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.wrapS = THREE.ClampToEdgeWrapping;
-  tex.wrapT = THREE.ClampToEdgeWrapping;
-  tex.needsUpdate = true;
-  return tex;
-}
-
-// ---------------------------------------------------------------------------
-// Sculpted Tactile Miniature Geometries
+// Sculpted Tactile Miniature Geometries (2-Tier Inner Hero / Outer Woodland LOD)
 // ---------------------------------------------------------------------------
 
 /**
- * Plush soft-cushion foliage blob (smooth subdivided icosahedron with gentle oblate
- * clay-cloud shaping + baked vertical AO vertex shading from darker underside to sunlit crown)
+ * Shared pillow shaping + baked vertical AO + smooth welded vertex normals for foliage cushions.
  */
-function createSoftCushionGeometry(detail = 2) {
-  const geo = new THREE.IcosahedronGeometry(1, detail);
+function shapeSoftCushionGeometry(rawGeo) {
+  if (rawGeo.attributes.uv) rawGeo.deleteAttribute('uv');
+  if (rawGeo.attributes.normal) rawGeo.deleteAttribute('normal');
+  const geo = mergeVertices(rawGeo, 1e-4);
+  rawGeo.dispose();
+
   const pos = geo.attributes.position;
   const colors = new Float32Array(pos.count * 3);
 
@@ -769,10 +746,27 @@ function createSoftCushionGeometry(detail = 2) {
 }
 
 /**
- * Tapered warm-wood trunk with subtle flared root base (origin at bottom y=0 -> top y=1)
+ * Plush soft-cushion foliage blob for inner hero broadleaf trees & campus shrubs
+ * (welded smooth-normal IcosahedronGeometry(1, 1) -> 80 tris / 42 verts)
  */
-function createFlaredTrunkGeometry(topR = 0.14, botR = 0.28, radialSegs = 10) {
-  const geo = new THREE.CylinderGeometry(topR, botR, 1.0, radialSegs, 5);
+function createSoftCushionGeometry(detail = 1) {
+  return shapeSoftCushionGeometry(new THREE.IcosahedronGeometry(1, detail));
+}
+
+/**
+ * Smooth welded oblate pillow cushion for distant outer woodland broadleaf trees
+ * (SphereGeometry(1, 8, 4) -> 48 tris / 26 verts with identical organic ripple & baked vertical AO)
+ */
+function createOuterCushionGeometry() {
+  return shapeSoftCushionGeometry(new THREE.SphereGeometry(1, 8, 4));
+}
+
+/**
+ * Tapered warm-wood trunk with subtle flared root base (origin at bottom y=0 -> top y=1).
+ * Open-ended because top embeds inside canopy and bottom embeds below terrain surface.
+ */
+function createFlaredTrunkGeometry(topR = 0.14, botR = 0.28, radialSegs = 8, heightSegs = 2) {
+  const geo = new THREE.CylinderGeometry(topR, botR, 1.0, radialSegs, heightSegs, true);
   geo.translate(0, 0.5, 0);
   const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
@@ -789,20 +783,46 @@ function createFlaredTrunkGeometry(topR = 0.14, botR = 0.28, radialSegs = 10) {
 }
 
 /**
- * Sculpted soft-beveled diorama conifer tier (rounded dome shoulder + softly scalloped 7-lobe
- * skirt + baked vertical AO shading — machined architectural-model elegance, zero harsh cones)
+ * Sculpted soft-beveled diorama conifer tier (rounded dome shoulder + softly scalloped
+ * 5-lobe bough skirt + baked vertical AO + seamless welded normals, zero degenerate apex quads)
  */
-function createConiferTierGeometry() {
-  const profile = [
-    new THREE.Vector2(0.01, -0.05),
-    new THREE.Vector2(0.92, 0.02),
-    new THREE.Vector2(1.0, 0.19),
-    new THREE.Vector2(0.85, 0.45),
-    new THREE.Vector2(0.56, 0.73),
-    new THREE.Vector2(0.26, 0.94),
-    new THREE.Vector2(0.01, 1.0),
-  ];
-  const geo = new THREE.LatheGeometry(profile, 21);
+function createConiferTierGeometry({ radialSegs = 12, isOuter = false } = {}) {
+  const profile = isOuter
+    ? [
+        new THREE.Vector2(0.94, 0.0),
+        new THREE.Vector2(1.0, 0.24),
+        new THREE.Vector2(0.56, 0.68),
+        new THREE.Vector2(0.0, 1.0),
+      ]
+    : [
+        new THREE.Vector2(0.92, 0.02),
+        new THREE.Vector2(1.0, 0.20),
+        new THREE.Vector2(0.78, 0.50),
+        new THREE.Vector2(0.42, 0.80),
+        new THREE.Vector2(0.0, 1.0),
+      ];
+
+  const rawGeo = new THREE.LatheGeometry(profile, radialSegs);
+  if (rawGeo.attributes.uv) rawGeo.deleteAttribute('uv');
+  if (rawGeo.attributes.normal) rawGeo.deleteAttribute('normal');
+  const geo = mergeVertices(rawGeo, 1e-4);
+  rawGeo.dispose();
+
+  // Strip degenerate zero-area triangles at the welded r=0 apex pole
+  if (geo.index) {
+    const srcIdx = geo.index.array;
+    const cleanIdx = [];
+    for (let i = 0; i < srcIdx.length; i += 3) {
+      const a = srcIdx[i];
+      const b = srcIdx[i + 1];
+      const c = srcIdx[i + 2];
+      if (a !== b && b !== c && a !== c) {
+        cleanIdx.push(a, b, c);
+      }
+    }
+    geo.setIndex(cleanIdx);
+  }
+
   const pos = geo.attributes.position;
   const colors = new Float32Array(pos.count * 3);
 
@@ -813,10 +833,10 @@ function createConiferTierGeometry() {
     const r = Math.hypot(x, z);
     if (r > 0.05) {
       const theta = Math.atan2(z, x);
-      // Soft 7-lobe organic pine-bough scallops strongest near the lower rim, smooth at crown
+      // Soft 5-lobe organic pine-bough scallops strongest near the lower rim, smooth at crown
       const skirtWeight = Math.max(0, 1.0 - Math.max(0, y) * 1.15);
-      const lobe = 1.0 + 0.125 * Math.cos(theta * 7.0) * skirtWeight + 0.035 * Math.sin(theta * 3.0);
-      const droop = -0.058 * Math.cos(theta * 7.0) * skirtWeight * r;
+      const lobe = 1.0 + 0.125 * Math.cos(theta * 5.0) * skirtWeight + 0.035 * Math.sin(theta * 3.0);
+      const droop = -0.058 * Math.cos(theta * 5.0) * skirtWeight * r;
       pos.setXYZ(i, x * lobe, y + droop, z * lobe);
     }
 
@@ -946,23 +966,60 @@ function finalizeInstancedMesh(inst, { castShadow = false, receiveShadow = false
 // ---------------------------------------------------------------------------
 const UP_VEC = new THREE.Vector3(0, 1, 0);
 
+// Shadow frustum bounds for selective outer woodland shadow casting (matches StudioScene directional shadow frustum)
+const SHADOW_FRUSTUM_HALF_X = 295;
+const SHADOW_FRUSTUM_HALF_Z = 240;
+
+function isHeroInnerTree(tr) {
+  return !tr.isOuter || (tr.dOut ?? 0) <= 2.0;
+}
+
+function isInsideShadowFrustum(tr) {
+  return Math.abs(tr.x) < SHADOW_FRUSTUM_HALF_X && Math.abs(tr.z) < SHADOW_FRUSTUM_HALF_Z;
+}
+
 function buildBroadleafCanopySystem({ trees, trunkMat, branchMat, stonePitMat, mulchMat, aoEntries }) {
   const grp = new THREE.Group();
   grp.name = 'BroadleafTrees';
   if (trees.length === 0) return grp;
 
-  const cushionGeo = createSoftCushionGeometry(2);
-  const trunkGeo = createFlaredTrunkGeometry(0.14, 0.30, 10);
-  const branchGeo = new THREE.CylinderGeometry(0.06, 0.13, 1.0, 7);
+  // Tier 1 (Inner Hero Campus: dOut <= 2m) vs Tier 2 (Outer Woodland: Near-Shadow vs Far No-Shadow)
+  let innerCount = 0;
+  let outerNearCount = 0;
+  let outerFarCount = 0;
+  for (let i = 0; i < trees.length; i++) {
+    const tr = trees[i];
+    if (isHeroInnerTree(tr)) {
+      innerCount++;
+    } else if (isInsideShadowFrustum(tr)) {
+      outerNearCount++;
+    } else {
+      outerFarCount++;
+    }
+  }
+  const outerCount = outerNearCount + outerFarCount;
+
+  const innerCushionGeo = createSoftCushionGeometry(1);
+  const outerCushionGeo = createOuterCushionGeometry();
+  const innerTrunkGeo = createFlaredTrunkGeometry(0.14, 0.30, 8, 2);
+  const outerTrunkGeo = createFlaredTrunkGeometry(0.14, 0.30, 6, 1);
+  const branchGeo = new THREE.CylinderGeometry(0.06, 0.13, 1.0, 5, 1, true);
   branchGeo.translate(0, 0.5, 0);
 
-  // 5 organically merged soft cloud cushions per broadleaf tree (asymmetric designer silhouette)
-  const cushionOffsets = [
+  // 5 organically merged soft cloud cushions per inner hero broadleaf tree
+  const innerCushionOffsets = [
     { x: -1.16, y: 0.12, z: -0.68, sx: 1.66, sy: 1.24, sz: 1.56, tier: 0 },
     { x: 1.22, y: 0.18, z: -0.52, sx: 1.62, sy: 1.20, sz: 1.58, tier: 0 },
     { x: 0.04, y: 0.22, z: 1.26, sx: 1.68, sy: 1.22, sz: 1.54, tier: 0 },
     { x: -0.28, y: 1.18, z: -0.14, sx: 1.88, sy: 1.38, sz: 1.82, tier: 1 },
     { x: 0.42, y: 1.94, z: 0.22, sx: 1.38, sy: 1.08, sz: 1.34, tier: 2 },
+  ];
+
+  // 3 fuller (~1.08× envelope) overlapping oblate cushions per outer woodland tree spanning all 3 palette tiers
+  const outerCushionOffsets = [
+    { x: -0.92, y: 0.22, z: -0.56, sx: 2.18, sy: 1.48, sz: 2.08, tier: 0 },
+    { x: 0.88, y: 0.56, z: 0.68, sx: 2.22, sy: 1.54, sz: 2.12, tier: 1 },
+    { x: 0.06, y: 1.58, z: -0.06, sx: 2.06, sy: 1.44, sz: 1.98, tier: 2 },
   ];
 
   // Natural deep photographic aerial chlorophyll palettes [lowerShade, midBody, sunlitCrown] (synced to #36662d lawn & QA #44)
@@ -998,12 +1055,35 @@ function buildBroadleafCanopySystem({ trees, trunkMat, branchMat, stonePitMat, m
     metalness: 0.0,
   });
 
-  const trunkInst = new THREE.InstancedMesh(trunkGeo, trunkMat, trees.length);
-  trunkInst.name = 'BroadleafTrunks';
-  const branchInst = new THREE.InstancedMesh(branchGeo, branchMat, trees.length * 3);
-  branchInst.name = 'BroadleafBranches';
-  const canopyInst = new THREE.InstancedMesh(cushionGeo, canopyMat, trees.length * cushionOffsets.length);
-  canopyInst.name = 'BroadleafCanopies';
+  const innerTrunkInst =
+    innerCount > 0 ? new THREE.InstancedMesh(innerTrunkGeo, trunkMat, innerCount) : null;
+  if (innerTrunkInst) innerTrunkInst.name = 'BroadleafInnerTrunks';
+
+  const innerBranchInst =
+    innerCount > 0 ? new THREE.InstancedMesh(branchGeo, branchMat, innerCount * 3) : null;
+  if (innerBranchInst) innerBranchInst.name = 'BroadleafInnerBranches';
+
+  const innerCanopyInst =
+    innerCount > 0
+      ? new THREE.InstancedMesh(innerCushionGeo, canopyMat, innerCount * innerCushionOffsets.length)
+      : null;
+  if (innerCanopyInst) innerCanopyInst.name = 'BroadleafInnerCanopies';
+
+  const outerTrunkInst =
+    outerCount > 0 ? new THREE.InstancedMesh(outerTrunkGeo, trunkMat, outerCount) : null;
+  if (outerTrunkInst) outerTrunkInst.name = 'BroadleafOuterTrunks';
+
+  const outerNearCanopyInst =
+    outerNearCount > 0
+      ? new THREE.InstancedMesh(outerCushionGeo, canopyMat, outerNearCount * outerCushionOffsets.length)
+      : null;
+  if (outerNearCanopyInst) outerNearCanopyInst.name = 'BroadleafOuterNearCanopies';
+
+  const outerFarCanopyInst =
+    outerFarCount > 0
+      ? new THREE.InstancedMesh(outerCushionGeo, canopyMat, outerFarCount * outerCushionOffsets.length)
+      : null;
+  if (outerFarCanopyInst) outerFarCanopyInst.name = 'BroadleafOuterFarCanopies';
 
   // Stone tree-pit collars & lawn mulch mounds ONLY on inner campus trees (never outer countryside woodland)
   const pitTrees = trees.filter((t) => !t.isOuter && t.hasPit && t.y < 0.05 && t.slope < 0.05);
@@ -1027,8 +1107,12 @@ function buildBroadleafCanopySystem({ trees, trunkMat, branchMat, stonePitMat, m
   const quat = new THREE.Quaternion();
   const colorObj = new THREE.Color();
 
-  let bIdx = 0;
-  let cIdx = 0;
+  let inTIdx = 0;
+  let inBIdx = 0;
+  let inCIdx = 0;
+  let outTIdx = 0;
+  let outNearCIdx = 0;
+  let outFarCIdx = 0;
   let pitIdx = 0;
   let mulchIdx = 0;
 
@@ -1045,35 +1129,51 @@ function buildBroadleafCanopySystem({ trees, trunkMat, branchMat, stonePitMat, m
     const cosR = Math.cos(rot);
     const sinR = Math.sin(rot);
 
-    // 1. Flared tapered trunk
+    const isHero = isHeroInnerTree(tr);
+
+    // 1. Flared tapered trunk (routed to Inner Hero or Outer Woodland trunk buffer)
     dummy.position.set(tr.x, baseY, tr.z);
     dummy.rotation.set(0, rot, 0);
     dummy.scale.set(s, totalTrunkH, s);
     dummy.updateMatrix();
-    trunkInst.setMatrixAt(i, dummy.matrix);
-
-    // 2. Three angled lower branch forks aimed directly into the 3 outer cloud cushions
-    const forkBaseY = tr.y + visibleTrunkH * 0.72;
-    const branchAngles = [-2.61, -0.40, 1.54];
-    for (let b = 0; b < 3; b++) {
-      const ba = rot + branchAngles[b];
-      const bLen = 1.92 * s;
-      const tilt = 0.56;
-      dummy.position.set(tr.x, forkBaseY, tr.z);
-      dummy.rotation.set(0, -ba, -tilt);
-      dummy.scale.set(s, bLen, s);
-      dummy.updateMatrix();
-      branchInst.setMatrixAt(bIdx++, dummy.matrix);
+    if (isHero && innerTrunkInst) {
+      innerTrunkInst.setMatrixAt(inTIdx++, dummy.matrix);
+    } else if (outerTrunkInst) {
+      outerTrunkInst.setMatrixAt(outTIdx++, dummy.matrix);
     }
 
-    // 3. Five sculpted cloud cushions with subtle hue/lightness botanical variation
+    // 2. Lower branch forks ONLY on inner campus hero trees (hidden under outer woodland canopies)
+    if (isHero && innerBranchInst) {
+      const forkBaseY = tr.y + visibleTrunkH * 0.72;
+      const branchAngles = [-2.61, -0.40, 1.54];
+      for (let b = 0; b < 3; b++) {
+        const ba = rot + branchAngles[b];
+        const bLen = 1.92 * s;
+        const tilt = 0.56;
+        dummy.position.set(tr.x, forkBaseY, tr.z);
+        dummy.rotation.set(0, -ba, -tilt);
+        dummy.scale.set(s, bLen, s);
+        dummy.updateMatrix();
+        innerBranchInst.setMatrixAt(inBIdx++, dummy.matrix);
+      }
+    }
+
+    // 3. Sculpted cloud cushions (5 cushions inner hero; 3 fuller cushions outer woodland split by shadow frustum)
     const crownBaseY = tr.y + visibleTrunkH + 0.78 * s;
     const palette = SPECIES_PALETTES[tr.species] || SPECIES_PALETTES.camphor;
     const treeHueShift = (seeded(i, 71) - 0.5) * 0.022;
     const treeLitShift = (seeded(i, 73) - 0.5) * 0.045;
 
-    for (let k = 0; k < cushionOffsets.length; k++) {
-      const po = cushionOffsets[k];
+    const offsets = isHero ? innerCushionOffsets : outerCushionOffsets;
+    let targetCanopy = innerCanopyInst;
+    let isOuterNear = false;
+    if (!isHero) {
+      isOuterNear = isInsideShadowFrustum(tr);
+      targetCanopy = isOuterNear ? outerNearCanopyInst : outerFarCanopyInst;
+    }
+
+    for (let k = 0; k < offsets.length; k++) {
+      const po = offsets[k];
       const lx = po.x * s;
       const lz = po.z * s;
       const wx = tr.x + lx * cosR - lz * sinR;
@@ -1088,15 +1188,16 @@ function buildBroadleafCanopySystem({ trees, trunkMat, branchMat, stonePitMat, m
       );
       dummy.scale.set(po.sx * s, po.sy * s, po.sz * s);
       dummy.updateMatrix();
-      canopyInst.setMatrixAt(cIdx, dummy.matrix);
 
       colorObj.copy(palette[po.tier]);
       const puffJitter = (seeded(i * 7 + k, 19) - 0.5) * 0.032;
       colorObj.offsetHSL(treeHueShift, puffJitter * 0.35, 0);
       // Multiplicative linear brightness variation prevents dark emerald undersides from clipping to black
       colorObj.multiplyScalar(1.0 + (treeLitShift + puffJitter) * 4.2);
-      canopyInst.setColorAt(cIdx, colorObj);
-      cIdx++;
+
+      const slot = isHero ? inCIdx++ : isOuterNear ? outNearCIdx++ : outFarCIdx++;
+      targetCanopy.setMatrixAt(slot, dummy.matrix);
+      targetCanopy.setColorAt(slot, colorObj);
     }
 
     // 4. Tree-pit collar (flat avenues/plazas) OR organic soil mound ring (inner park lawns only)
@@ -1143,11 +1244,16 @@ function buildBroadleafCanopySystem({ trees, trunkMat, branchMat, stonePitMat, m
     }
   }
 
-  grp.add(
-    finalizeInstancedMesh(trunkInst, { castShadow: true, receiveShadow: true }),
-    finalizeInstancedMesh(branchInst, { castShadow: true, receiveShadow: false }),
-    finalizeInstancedMesh(canopyInst, { castShadow: true, receiveShadow: true })
-  );
+  if (innerTrunkInst) grp.add(finalizeInstancedMesh(innerTrunkInst, { castShadow: true, receiveShadow: true }));
+  if (innerBranchInst) grp.add(finalizeInstancedMesh(innerBranchInst, { castShadow: true, receiveShadow: false }));
+  if (innerCanopyInst) grp.add(finalizeInstancedMesh(innerCanopyInst, { castShadow: true, receiveShadow: true }));
+  if (outerTrunkInst) grp.add(finalizeInstancedMesh(outerTrunkInst, { castShadow: false, receiveShadow: true }));
+  if (outerNearCanopyInst) {
+    grp.add(finalizeInstancedMesh(outerNearCanopyInst, { castShadow: true, receiveShadow: true }));
+  }
+  if (outerFarCanopyInst) {
+    grp.add(finalizeInstancedMesh(outerFarCanopyInst, { castShadow: false, receiveShadow: true }));
+  }
   if (pitCollarInst) grp.add(finalizeInstancedMesh(pitCollarInst, { castShadow: true, receiveShadow: true }));
   if (mulchInst) grp.add(finalizeInstancedMesh(mulchInst, { castShadow: false, receiveShadow: true }));
   return grp;
@@ -1158,9 +1264,27 @@ function buildSculptedConifers({ trees, trunkMat, aoEntries }) {
   grp.name = 'SculptedConifers';
   if (trees.length === 0) return grp;
 
-  const tiers = 5;
-  const trunkGeo = createFlaredTrunkGeometry(0.10, 0.28, 8);
-  const tierGeo = createConiferTierGeometry();
+  let innerCount = 0;
+  let outerNearCount = 0;
+  let outerFarCount = 0;
+  for (let i = 0; i < trees.length; i++) {
+    const tr = trees[i];
+    if (isHeroInnerTree(tr)) {
+      innerCount++;
+    } else if (isInsideShadowFrustum(tr)) {
+      outerNearCount++;
+    } else {
+      outerFarCount++;
+    }
+  }
+  const outerCount = outerNearCount + outerFarCount;
+
+  const innerTiers = 5;
+  const outerTiers = 3;
+  const innerTrunkGeo = createFlaredTrunkGeometry(0.10, 0.28, 7, 2);
+  const outerTrunkGeo = createFlaredTrunkGeometry(0.10, 0.28, 6, 1);
+  const innerTierGeo = createConiferTierGeometry({ radialSegs: 12, isOuter: false });
+  const outerTierGeo = createConiferTierGeometry({ radialSegs: 10, isOuter: true });
 
   const foliageMat = new THREE.MeshStandardMaterial({
     color: '#ffffff',
@@ -1169,10 +1293,25 @@ function buildSculptedConifers({ trees, trunkMat, aoEntries }) {
     metalness: 0.0,
   });
 
-  const trunkInst = new THREE.InstancedMesh(trunkGeo, trunkMat, trees.length);
-  trunkInst.name = 'ConiferTrunks';
-  const tierInst = new THREE.InstancedMesh(tierGeo, foliageMat, trees.length * tiers);
-  tierInst.name = 'ConiferTiers';
+  const innerTrunkInst =
+    innerCount > 0 ? new THREE.InstancedMesh(innerTrunkGeo, trunkMat, innerCount) : null;
+  if (innerTrunkInst) innerTrunkInst.name = 'ConiferInnerTrunks';
+
+  const innerTierInst =
+    innerCount > 0 ? new THREE.InstancedMesh(innerTierGeo, foliageMat, innerCount * innerTiers) : null;
+  if (innerTierInst) innerTierInst.name = 'ConiferInnerTiers';
+
+  const outerTrunkInst =
+    outerCount > 0 ? new THREE.InstancedMesh(outerTrunkGeo, trunkMat, outerCount) : null;
+  if (outerTrunkInst) outerTrunkInst.name = 'ConiferOuterTrunks';
+
+  const outerNearTierInst =
+    outerNearCount > 0 ? new THREE.InstancedMesh(outerTierGeo, foliageMat, outerNearCount * outerTiers) : null;
+  if (outerNearTierInst) outerNearTierInst.name = 'ConiferOuterNearTiers';
+
+  const outerFarTierInst =
+    outerFarCount > 0 ? new THREE.InstancedMesh(outerTierGeo, foliageMat, outerFarCount * outerTiers) : null;
+  if (outerFarTierInst) outerFarTierInst.name = 'ConiferOuterFarTiers';
 
   // Deep velvety woodland pine shadow -> rich evergreen body -> natural sunlit pine apex (QA #44)
   const cBase = new THREE.Color('#132F19');
@@ -1181,7 +1320,19 @@ function buildSculptedConifers({ trees, trunkMat, aoEntries }) {
   const col = new THREE.Color();
   const dummy = new THREE.Object3D();
 
-  let wIdx = 0;
+  // Outer 3-tier conifer silhouette specs (matching exact 1.75..9.70s height & lush base volume of 5-tier conifers)
+  const outerTierSpecs = [
+    { yOff: 1.75, r: 2.84, h: 3.30, frac: 0.0 },
+    { yOff: 4.05, r: 2.10, h: 3.10, frac: 0.5 },
+    { yOff: 6.35, r: 1.24, h: 3.35, frac: 1.0 },
+  ];
+
+  let inTIdx = 0;
+  let inWIdx = 0;
+  let outTIdx = 0;
+  let outNearWIdx = 0;
+  let outFarWIdx = 0;
+
   for (let i = 0; i < trees.length; i++) {
     const tr = trees[i];
     const s = tr.scale;
@@ -1191,37 +1342,72 @@ function buildSculptedConifers({ trees, trunkMat, aoEntries }) {
     const treeH = 9.4 * s;
     const baseY = tr.y - rootEmbed;
 
+    const isHero = isHeroInnerTree(tr);
+
     dummy.position.set(tr.x, baseY, tr.z);
     dummy.rotation.set(0, tr.rot, 0);
     dummy.scale.set(s, treeH * 0.88 + rootEmbed, s);
     dummy.updateMatrix();
-    trunkInst.setMatrixAt(i, dummy.matrix);
+    if (isHero && innerTrunkInst) {
+      innerTrunkInst.setMatrixAt(inTIdx++, dummy.matrix);
+    } else if (outerTrunkInst) {
+      outerTrunkInst.setMatrixAt(outTIdx++, dummy.matrix);
+    }
 
     const treeHue = (seeded(i, 83) - 0.5) * 0.025;
     const treeLit = (seeded(i, 89) - 0.5) * 0.048;
 
-    for (let t = 0; t < tiers; t++) {
-      const frac = t / (tiers - 1);
-      const tierY = tr.y + (1.85 + frac * 5.85) * s;
-      const tierR = (2.68 - frac * 1.82) * s;
-      const tierH = (2.35 - frac * 0.38) * s;
+    if (isHero && innerTierInst) {
+      for (let t = 0; t < innerTiers; t++) {
+        const frac = t / (innerTiers - 1);
+        const tierY = tr.y + (1.85 + frac * 5.85) * s;
+        const tierR = (2.68 - frac * 1.82) * s;
+        const tierH = (2.35 - frac * 0.38) * s;
 
-      dummy.position.set(tr.x, tierY, tr.z);
-      dummy.rotation.set(0, tr.rot + t * 0.58, 0);
-      dummy.scale.set(tierR, tierH, tierR);
-      dummy.updateMatrix();
-      tierInst.setMatrixAt(wIdx, dummy.matrix);
+        dummy.position.set(tr.x, tierY, tr.z);
+        dummy.rotation.set(0, tr.rot + t * 0.58, 0);
+        dummy.scale.set(tierR, tierH, tierR);
+        dummy.updateMatrix();
+        innerTierInst.setMatrixAt(inWIdx, dummy.matrix);
 
-      if (frac < 0.5) {
-        col.lerpColors(cBase, cMid, frac * 2.0);
-      } else {
-        col.lerpColors(cMid, cTop, (frac - 0.5) * 2.0);
+        if (frac < 0.5) {
+          col.lerpColors(cBase, cMid, frac * 2.0);
+        } else {
+          col.lerpColors(cMid, cTop, (frac - 0.5) * 2.0);
+        }
+        col.offsetHSL(treeHue, 0, 0);
+        // Multiplicative linear brightness variation keeps deep pine base shadows rich (never black-clipped)
+        col.multiplyScalar(1.0 + (treeLit + (seeded(i, t + 11) - 0.5) * 0.025) * 4.2);
+        innerTierInst.setColorAt(inWIdx, col);
+        inWIdx++;
       }
-      col.offsetHSL(treeHue, 0, 0);
-      // Multiplicative linear brightness variation keeps deep pine base shadows rich (never black-clipped)
-      col.multiplyScalar(1.0 + (treeLit + (seeded(i, t + 11) - 0.5) * 0.025) * 4.2);
-      tierInst.setColorAt(wIdx, col);
-      wIdx++;
+    } else {
+      const inShadow = isInsideShadowFrustum(tr);
+      const targetInst = inShadow ? outerNearTierInst : outerFarTierInst;
+      for (let t = 0; t < outerTiers; t++) {
+        const sp = outerTierSpecs[t];
+        const frac = sp.frac;
+        const tierY = tr.y + sp.yOff * s;
+        const tierR = sp.r * s;
+        const tierH = sp.h * s;
+
+        dummy.position.set(tr.x, tierY, tr.z);
+        dummy.rotation.set(0, tr.rot + t * 0.65, 0);
+        dummy.scale.set(tierR, tierH, tierR);
+        dummy.updateMatrix();
+
+        if (frac < 0.5) {
+          col.lerpColors(cBase, cMid, frac * 2.0);
+        } else {
+          col.lerpColors(cMid, cTop, (frac - 0.5) * 2.0);
+        }
+        col.offsetHSL(treeHue, 0, 0);
+        col.multiplyScalar(1.0 + (treeLit + (seeded(i, t + 11) - 0.5) * 0.025) * 4.2);
+
+        const slot = inShadow ? outNearWIdx++ : outFarWIdx++;
+        targetInst.setMatrixAt(slot, dummy.matrix);
+        targetInst.setColorAt(slot, col);
+      }
     }
 
     // Contact AO disc only on gentle terrain (steep mountain flanks rely on real shadows; fade before outer cloud sea)
@@ -1243,10 +1429,15 @@ function buildSculptedConifers({ trees, trunkMat, aoEntries }) {
     }
   }
 
-  grp.add(
-    finalizeInstancedMesh(trunkInst, { castShadow: true, receiveShadow: true }),
-    finalizeInstancedMesh(tierInst, { castShadow: true, receiveShadow: true })
-  );
+  if (innerTrunkInst) grp.add(finalizeInstancedMesh(innerTrunkInst, { castShadow: true, receiveShadow: true }));
+  if (innerTierInst) grp.add(finalizeInstancedMesh(innerTierInst, { castShadow: true, receiveShadow: true }));
+  if (outerTrunkInst) grp.add(finalizeInstancedMesh(outerTrunkInst, { castShadow: false, receiveShadow: true }));
+  if (outerNearTierInst) {
+    grp.add(finalizeInstancedMesh(outerNearTierInst, { castShadow: true, receiveShadow: true }));
+  }
+  if (outerFarTierInst) {
+    grp.add(finalizeInstancedMesh(outerFarTierInst, { castShadow: false, receiveShadow: true }));
+  }
   return grp;
 }
 
@@ -1455,16 +1646,17 @@ function buildShorelineReeds(tufts) {
 function buildContactAODiscs(aoEntries) {
   if (aoEntries.length === 0) return null;
 
-  const aoTex = createContactAOTexture();
+  const aoTex = typeof document !== 'undefined' ? createContactShadowTexture(4) : null;
   const aoGeo = new THREE.PlaneGeometry(2, 2);
   aoGeo.rotateX(-Math.PI / 2);
 
   // Deepened lush forest-shadow Contact AO discs matching crisp aerial sunlight (QA #44)
+  // Calibrated to shared createContactShadowTexture (rgba(18,34,20,0.74) center) -> matches #0E1C10 @ 0.545 effective alpha
   const aoMat = new THREE.MeshBasicMaterial({
     map: aoTex,
-    color: '#0E1C10',
+    color: '#C8D0C8',
     transparent: true,
-    opacity: 0.58,
+    opacity: 0.74,
     depthWrite: false,
     polygonOffset: true,
     polygonOffsetFactor: -1,

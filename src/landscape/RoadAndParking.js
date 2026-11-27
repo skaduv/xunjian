@@ -3,6 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { BUILDING_WINGS, ELEVATIONS, PLINTH_CONFIG } from '../config/campusConfig.js';
 import {
   createAsphaltRoadTexture,
+  createContactShadowTexture,
   createFeatheredLightPoolTexture,
   createLightConeTexture,
   createParkingLotTexture,
@@ -236,27 +237,6 @@ function createInlineWalkwayStoneTexture(maxAnisotropy = 4) {
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   tex.anisotropy = Math.min(maxAnisotropy, 8);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.needsUpdate = true;
-  return tex;
-}
-
-function createSoftAOTexture() {
-  const size = 96;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  const half = size * 0.5;
-  const grad = ctx.createRadialGradient(half, half, size * 0.08, half, half, half);
-  grad.addColorStop(0.0, 'rgba(22, 34, 24, 0.54)');
-  grad.addColorStop(0.45, 'rgba(22, 34, 24, 0.25)');
-  grad.addColorStop(0.82, 'rgba(22, 34, 24, 0.06)');
-  grad.addColorStop(1.0, 'rgba(22, 34, 24, 0.0)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, size, size);
-
-  const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.needsUpdate = true;
   return tex;
@@ -1073,11 +1053,11 @@ function buildRoadStreetlights(streetlightPlacements, maxAnisotropy) {
     roughness: 0.2,
   });
 
-  const aoTex = createSoftAOTexture();
+  const aoTex = createContactShadowTexture(Math.min(maxAnisotropy, 4));
   const aoMat = new THREE.MeshBasicMaterial({
     map: aoTex,
     transparent: true,
-    opacity: 0.42,
+    opacity: 0.31,
     depthWrite: false,
     polygonOffset: true,
     polygonOffsetFactor: -1,
@@ -1356,7 +1336,7 @@ function buildRoadStreetlights(streetlightPlacements, maxAnisotropy) {
       const active = dusk > 0.005;
       lensMat.emissiveIntensity = 0.14 + dusk * 2.9 + night * 1.35;
       ledDotMat.emissiveIntensity = 1.35 + dusk * 1.2 + night * 0.85;
-      aoMat.opacity = THREE.MathUtils.lerp(0.42, 0.16, dusk);
+      aoMat.opacity = THREE.MathUtils.lerp(0.31, 0.12, dusk);
       poolMat.visible = active;
       poolMat.opacity = dusk * 0.44 + night * 0.24;
       coneMat.visible = active;

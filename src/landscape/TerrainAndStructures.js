@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { ELEVATIONS, LAKE_SHORELINE, PLINTH_CONFIG } from '../config/campusConfig.js';
 import { createRoundedRectShape } from '../plinth/HardwarePlinth.js';
 import {
+  createContactShadowTexture,
   createFeatheredLightPoolTexture,
   createMowedLawnTexture,
   createTeakDeckTexture,
@@ -117,30 +118,6 @@ export function sampleLongpanHeight(x, z) {
 
 export function sampleGroundElevation(x, z) {
   return Math.max(sampleSWHillHeight(x, z), sampleLongpanHeight(x, z));
-}
-
-/**
- * 极轻量内联深森影软接触阴影圆盘纹理（深润柔和 AO，零硬边，适配日光绿地与暖石广场）
- */
-function createContactShadowTexture() {
-  const size = 64;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  const half = size * 0.5;
-  const grad = ctx.createRadialGradient(half, half, 0, half, half, half);
-  grad.addColorStop(0.0, 'rgba(20, 30, 22, 0.46)');
-  grad.addColorStop(0.45, 'rgba(20, 30, 22, 0.26)');
-  grad.addColorStop(0.75, 'rgba(20, 30, 22, 0.09)');
-  grad.addColorStop(1.0, 'rgba(20, 30, 22, 0.0)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, size, size);
-
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.needsUpdate = true;
-  return tex;
 }
 
 /**
@@ -1608,7 +1585,7 @@ export function buildTerrainAndStructures(maxAnisotropy = 8) {
 
   const lawnTex = createMowedLawnTexture(maxAnisotropy);
   const teakTex = createTeakDeckTexture(maxAnisotropy);
-  const contactAoTex = createContactShadowTexture();
+  const contactAoTex = createContactShadowTexture(Math.min(maxAnisotropy, 4));
 
   // 核心材质库（100% 对齐无边界云雾绿野规范 #38：与外围无界草坪共用完全一致的材质参数、色阶与世界 UV）
   const lawnMat = new THREE.MeshStandardMaterial({
@@ -1649,7 +1626,7 @@ export function buildTerrainAndStructures(maxAnisotropy = 8) {
   const contactAoMat = new THREE.MeshBasicMaterial({
     map: contactAoTex,
     transparent: true,
-    opacity: 0.76,
+    opacity: 0.47,
     depthWrite: false,
     polygonOffset: true,
     polygonOffsetFactor: -1,
@@ -1903,8 +1880,8 @@ export function buildTerrainAndStructures(maxAnisotropy = 8) {
       landmarkPoolMat.visible = glowOn;
       landmarkPoolMat.opacity = dusk * 0.38 + night * 0.22;
 
-      // 夜间轻微减弱日间接触 AO，避免与地面羽化光池打架
-      contactAoMat.opacity = THREE.MathUtils.lerp(0.76, 0.28, dusk);
+      // 夜间轻微减弱日间接触 AO，避免与地面羽化光池打架（对齐共享接触阴影纹理 alpha=0.74）
+      contactAoMat.opacity = THREE.MathUtils.lerp(0.47, 0.17, dusk);
     },
   };
 }
