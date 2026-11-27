@@ -8,6 +8,7 @@
  *
  * 面板只通过 window.CampusTwin API 驱动三维场景，不直接触碰 three.js 对象。
  */
+import '@fontsource-variable/inter';
 import '@shoelace-style/shoelace/dist/themes/light.css';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/icon-button/icon-button.js';
@@ -106,7 +107,7 @@ function trendSvg(values) {
   return `<svg viewBox="0 0 ${w} ${h}" class="trend-svg" preserveAspectRatio="none">
       <defs>
         <linearGradient id="barPeak" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0" stop-color="#67e8f9"/><stop offset="1" stop-color="#0ea5e9"/>
+          <stop offset="0" stop-color="#ffb48f"/><stop offset="1" stop-color="#e8461e"/>
         </linearGradient>
       </defs>
       <line x1="0" x2="${w}" y1="${h - 0.5}" y2="${h - 0.5}" class="trend-base"/>
@@ -269,7 +270,7 @@ export function mountHud(root, api, { setPreviewRectProvider } = {}) {
           <div class="divider"></div>
           <header class="card__head"><span class="eyebrow">状态图例</span></header>
           <div class="legend">
-            <span><i class="sw sw--acc"></i>在线</span>
+            <span><i class="sw sw--pin"></i>在线</span>
             <span><i class="sw sw--crit"></i>紧急告警</span>
             <span><i class="sw sw--warn"></i>工单告警</span>
             <span><i class="sw sw--tamper"></i>遮挡篡改</span>

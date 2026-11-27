@@ -21,11 +21,11 @@ import * as THREE from 'three';
 
 export const CAMERA_STATE_STYLES = {
   // 与 HUD 设计令牌一致：中性石墨底 + 电光蓝品牌色，异常态才使用语义色
-  online: { color: '#13b5ea', label: '在线', fov: '#3fd0f0', fovOpacity: 0.15, pulse: false },
+  online: { color: '#3a3530', label: '在线', fov: '#ff8a5c', fovOpacity: 0.15, pulse: false },
   offline: { color: '#8b93a1', label: '离线', fov: '#8b93a1', fovOpacity: 0.06, pulse: false },
   muted: { color: '#aab2bf', label: '静默', fov: '#aab2bf', fovOpacity: 0.08, pulse: false },
-  alarm_critical: { color: '#f87171', label: '紧急告警', fov: '#ff6b6b', fovOpacity: 0.22, pulse: true, speed: 1.6 },
-  alarm_order: { color: '#fbbf24', label: '工单告警', fov: '#fbbf24', fovOpacity: 0.2, pulse: true, speed: 1.2 },
+  alarm_critical: { color: '#e11d48', label: '紧急告警', fov: '#ff6b6b', fovOpacity: 0.22, pulse: true, speed: 1.6 },
+  alarm_order: { color: '#facc15', label: '工单告警', fov: '#facc15', fovOpacity: 0.2, pulse: true, speed: 1.2 },
   tamper: { color: '#a78bfa', label: '遮挡/篡改', fov: '#a78bfa', fovOpacity: 0.2, pulse: true, speed: 2.0 },
 };
 
@@ -149,7 +149,9 @@ function getSharedAssets() {
   const getPinTexture = (state, selected) => {
     const key = `${state}|${selected ? 1 : 0}`;
     if (!pinTextures.has(key)) {
-      pinTextures.set(key, drawPinTexture(CAMERA_STATE_STYLES[state].color, selected));
+      // 在线点位用中性炭灰，选中时换品牌橙；告警态保留各自状态色
+      const color = selected && state === 'online' ? '#f26b3a' : CAMERA_STATE_STYLES[state].color;
+      pinTextures.set(key, drawPinTexture(color, selected));
     }
     return pinTextures.get(key);
   };
@@ -238,7 +240,7 @@ function buildFrustum(spec) {
     vertexShader: FRUSTUM_VERT,
     fragmentShader: FRUSTUM_FRAG,
     uniforms: {
-      uColor: { value: new THREE.Color('#3fd0f0') },
+      uColor: { value: new THREE.Color('#ff8a5c') },
       uOpacity: { value: 0.16 },
       uTime: { value: 0 },
     },
@@ -259,7 +261,7 @@ function buildFrustum(spec) {
   }
   const edgeGeo = new THREE.BufferGeometry();
   edgeGeo.setAttribute('position', new THREE.Float32BufferAttribute(edgePts, 3));
-  const edgeMat = new THREE.LineBasicMaterial({ color: '#3fd0f0', transparent: true, opacity: 0.75, depthWrite: false });
+  const edgeMat = new THREE.LineBasicMaterial({ color: '#ff8a5c', transparent: true, opacity: 0.75, depthWrite: false });
   const edges = new THREE.LineSegments(edgeGeo, edgeMat);
   edges.name = 'FrustumEdges';
   edges.renderOrder = 21;
@@ -384,7 +386,7 @@ export function createSurveillanceCamera(rawSpec, opts = {}) {
   const footprintGeo = new THREE.BufferGeometry();
   footprintGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(6 * 3), 3));
   const footprintMat = new THREE.MeshBasicMaterial({
-    color: '#3fd0f0',
+    color: '#ff8a5c',
     transparent: true,
     opacity: 0.2,
     depthWrite: false,
@@ -400,7 +402,7 @@ export function createSurveillanceCamera(rawSpec, opts = {}) {
   footprintLineGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(5 * 3), 3));
   const footprintLine = new THREE.Line(
     footprintLineGeo,
-    new THREE.LineBasicMaterial({ color: '#3fd0f0', transparent: true, opacity: 0.9, depthWrite: false })
+    new THREE.LineBasicMaterial({ color: '#ff8a5c', transparent: true, opacity: 0.9, depthWrite: false })
   );
   footprintLine.frustumCulled = false;
   footprintLine.renderOrder = 19;
@@ -432,7 +434,7 @@ export function createSurveillanceCamera(rawSpec, opts = {}) {
     new THREE.Vector3(spec.position[0], spec.position[1] + spec.markerHeight, spec.position[2]),
   ]);
   const leaderMat = new THREE.LineDashedMaterial({
-    color: '#3fd0f0',
+    color: '#ff8a5c',
     dashSize: 0.5,
     gapSize: 0.35,
     transparent: true,
@@ -444,7 +446,7 @@ export function createSurveillanceCamera(rawSpec, opts = {}) {
   leader.renderOrder = 39;
 
   const ringMat = new THREE.MeshBasicMaterial({
-    color: '#3fd0f0',
+    color: '#ff8a5c',
     transparent: true,
     opacity: 0.0,
     depthWrite: false,
@@ -512,8 +514,9 @@ export function createSurveillanceCamera(rawSpec, opts = {}) {
     pinMat.needsUpdate = true;
     const k = selected ? 1.3 : 1;
     pin.scale.set(PIN_SIZE * 0.8 * k, PIN_SIZE * k, 1);
-    leaderMat.color.set(style.color);
-    ringMat.color.set(style.color);
+    const lineColor = selected && state === 'online' ? '#f26b3a' : style.color;
+    leaderMat.color.set(lineColor);
+    ringMat.color.set(lineColor);
     frustum.mat.uniforms.uColor.value.set(style.fov);
     frustum.mat.uniforms.uOpacity.value = style.fovOpacity * (selected ? 1.35 : 1);
     frustum.edgeMat.color.set(style.fov);
