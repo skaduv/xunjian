@@ -10,8 +10,8 @@
 :root,
 .sl-theme-light {
   /* 白色哑光 + 磨砂亚克力：乳白半透明底、强模糊提亮、细白高光边、柔和多层投影、极细颗粒噪点 */
-  --g-bg: linear-gradient(155deg, rgba(236, 240, 246, 0.46) 0%, rgba(214, 221, 231, 0.36) 55%, rgba(198, 207, 219, 0.4) 100%);
-  --g-filter: blur(30px) saturate(0.25) brightness(1.02) contrast(0.82);
+  --g-bg: linear-gradient(155deg, rgba(236, 240, 246, 0.28) 0%, rgba(214, 221, 231, 0.2) 55%, rgba(198, 207, 219, 0.24) 100%);
+  --g-filter: blur(9px) saturate(0.7) brightness(1.0) contrast(0.9);
   --g-noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.45 0 0 0 0 0.5 0 0 0 0 0.58 0 0 0 0.09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   --g-edge: rgba(255, 255, 255, 0.6);
   --g-line: rgba(22, 32, 52, 0.08);
@@ -20,7 +20,7 @@
   --g-inner: inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 0 0 1px rgba(255, 255, 255, 0.35), inset 0 -18px 30px -24px rgba(160, 180, 205, 0.45);
 
   /* 内嵌凸起元件：乳白实体块 */
-  --g-tile: linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(244, 247, 251, 0.42));
+  --g-tile: linear-gradient(180deg, rgba(255, 255, 255, 0.46), rgba(244, 247, 251, 0.3));
   --g-tile-flat: rgba(255, 255, 255, 0.55);
   --g-tile-hover: rgba(255, 255, 255, 0.92);
   --g-tile-shadow: 0 1px 2px rgba(22, 32, 52, 0.06), 0 4px 10px -6px rgba(22, 32, 52, 0.12), inset 0 1px 0 #fff;
