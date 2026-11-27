@@ -116,12 +116,15 @@ const CAMERA_MOUNT_SPECS = {
     mount: 'column',
     anchorOffset: [-0.70, 0, 0], // 取消多余独立立杆，改以抱箍悬臂直连中央门廊钢柱 (32.8, 5.895, -79.2)
   },
-  // A14 室外立杆移出 WestBranch 行车道至西路缘外侧 x=-150.2
+  // A14 室外立杆移出 WestBranch 行车道至西路缘外侧 x=-150.2；CAM-09 东移至 x=15.6 避让北广场西转弯车道
   'CAM-10': {
     overridePos: [-150.2, 6.4, -36.0],
     mount: 'pole',
   },
-  'CAM-09': { mount: 'pole' },
+  'CAM-09': {
+    overridePos: [15.6, 6.2, -104.0],
+    mount: 'pole',
+  },
   'CAM-11': { mount: 'pole' },
 };
 
