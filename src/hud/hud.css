@@ -1,0 +1,850 @@
+/* =====================================================================
+ * AI 安全巡检工作台 · 磨砂玻璃 HUD
+ * 配色：深橄榄黑玻璃 + 青柠强调色（对齐 Dribbble 农业航拍 dashboard 参考）
+ * ===================================================================== */
+
+:root,
+.sl-theme-dark {
+  --hud-glass: rgba(14, 16, 13, 0.72);
+  --hud-glass-strong: rgba(20, 23, 19, 0.7);
+  --hud-stroke: rgba(255, 255, 255, 0.09);
+  --hud-stroke-hi: rgba(255, 255, 255, 0.16);
+  --hud-text: #eef1e6;
+  --hud-muted: rgba(226, 232, 214, 0.56);
+  --hud-lime: #c7f26a;
+  --hud-lime-soft: rgba(199, 242, 106, 0.16);
+  --hud-amber: #ffb547;
+  --hud-red: #ff5a4f;
+  --hud-violet: #c08bff;
+  --hud-radius: 18px;
+
+  /* Shoelace 主色改为青柠 */
+  --sl-color-primary-50: #1d2412;
+  --sl-color-primary-100: #2b3718;
+  --sl-color-primary-200: #3f5121;
+  --sl-color-primary-300: #5f7c2e;
+  --sl-color-primary-400: #8fb846;
+  --sl-color-primary-500: #b4e04f;
+  --sl-color-primary-600: #c7f26a;
+  --sl-color-primary-700: #d4f68a;
+  --sl-color-primary-800: #e2f9ad;
+  --sl-color-primary-900: #f0fcd3;
+  --sl-color-primary-950: #f8feea;
+  --sl-font-sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', sans-serif;
+  --sl-input-background-color: rgba(255, 255, 255, 0.05);
+  --sl-input-background-color-hover: rgba(255, 255, 255, 0.08);
+  --sl-input-background-color-focus: rgba(255, 255, 255, 0.08);
+  --sl-input-border-color: rgba(255, 255, 255, 0.1);
+  --sl-input-border-color-hover: rgba(255, 255, 255, 0.18);
+  --sl-input-color: var(--hud-text);
+  --sl-focus-ring-color: rgba(199, 242, 106, 0.45);
+  --sl-tooltip-background-color: rgba(20, 23, 19, 0.92);
+}
+
+body.hud-on .campus-caption {
+  display: none;
+}
+
+.hud {
+  position: absolute;
+  inset: 0;
+  color: var(--hud-text);
+  font-family: var(--sl-font-sans);
+  font-size: 13px;
+  letter-spacing: 0.01em;
+}
+
+.hud .glass {
+  pointer-events: auto;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.0) 46%),
+    var(--hud-glass);
+  border: 1px solid var(--hud-stroke);
+  border-radius: var(--hud-radius);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 18px 40px -18px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(24px) saturate(130%) brightness(0.7);
+  -webkit-backdrop-filter: blur(24px) saturate(130%) brightness(0.7);
+}
+
+.hud .muted {
+  color: var(--hud-muted);
+}
+
+.hud b {
+  font-weight: 600;
+}
+
+/* ---------------- 顶栏 ---------------- */
+.hud-top {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 10px 16px 10px 14px;
+  border-radius: 999px !important;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand__dot {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #e9ffb4, var(--hud-lime) 45%, #6f9a28);
+  box-shadow: 0 0 18px rgba(199, 242, 106, 0.55);
+}
+
+.brand__eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--hud-muted);
+}
+
+.brand__title {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.chips {
+  display: flex;
+  gap: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  color: var(--hud-muted);
+  white-space: nowrap;
+}
+
+.chip sl-icon {
+  color: var(--hud-lime);
+  font-size: 14px;
+}
+
+.chip b {
+  color: var(--hud-text);
+}
+
+.chip--clock {
+  font-variant-numeric: tabular-nums;
+  color: var(--hud-text);
+  font-weight: 600;
+}
+
+.hud-account {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px 6px 10px;
+  border-radius: 999px !important;
+}
+
+.hud-account sl-icon-button {
+  font-size: 17px;
+  color: var(--hud-text);
+}
+
+.hud-account sl-avatar {
+  --size: 32px;
+  margin-left: 4px;
+}
+
+.hud-account sl-avatar::part(base) {
+  background: var(--hud-lime);
+  color: #1b2210;
+  font-weight: 700;
+}
+
+.bell {
+  position: relative;
+}
+
+.bell sl-badge {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  pointer-events: none;
+}
+
+/* ---------------- 卡片通用 ---------------- */
+.card {
+  padding: 14px 16px;
+}
+
+.card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.card__head > sl-icon {
+  color: var(--hud-muted);
+  font-size: 16px;
+}
+
+.dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin: 0 4px 1px 8px;
+}
+
+.dot:first-child {
+  margin-left: 0;
+}
+
+.dot--ok {
+  background: var(--hud-lime);
+  box-shadow: 0 0 8px rgba(199, 242, 106, 0.8);
+}
+
+.dot--crit {
+  background: var(--hud-red);
+}
+
+.dot--off {
+  background: #7d837a;
+}
+
+.dot--pulse {
+  animation: hudPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes hudPulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.pill {
+  flex: none;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.pill--ok {
+  color: var(--hud-lime);
+  background: var(--hud-lime-soft);
+  border-color: rgba(199, 242, 106, 0.28);
+}
+
+.pill--warn {
+  color: var(--hud-amber);
+  background: rgba(255, 181, 71, 0.14);
+  border-color: rgba(255, 181, 71, 0.3);
+}
+
+.pill--crit {
+  color: #ff8a80;
+  background: rgba(255, 90, 79, 0.16);
+  border-color: rgba(255, 90, 79, 0.34);
+}
+
+.pill--tamper {
+  color: var(--hud-violet);
+  background: rgba(192, 139, 255, 0.14);
+  border-color: rgba(192, 139, 255, 0.3);
+}
+
+.pill--off {
+  color: #b8bdb3;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* ---------------- 左列 ---------------- */
+.hud-left {
+  position: absolute;
+  top: 88px;
+  left: 18px;
+  bottom: 18px;
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.kpi {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.kpi sl-progress-ring {
+  --size: 92px;
+  --track-width: 8px;
+  --indicator-width: 8px;
+  --track-color: rgba(255, 255, 255, 0.08);
+  --indicator-color: var(--hud-lime);
+  font-size: 20px;
+}
+
+.kpi__big {
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi__row {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--hud-muted);
+  white-space: nowrap;
+}
+
+.trend {
+  height: 86px;
+}
+
+.spark {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.spark__line {
+  fill: none;
+  stroke: #e4f7b8;
+  stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+}
+
+.spark__guide {
+  stroke: rgba(255, 255, 255, 0.18);
+  stroke-dasharray: 3 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.spark__bar {
+  fill: rgba(255, 255, 255, 0.07);
+}
+
+.spark__dot {
+  fill: var(--hud-lime);
+  stroke: #1b2210;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.trend__axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--hud-muted);
+}
+
+.card--list {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.card--list sl-input {
+  margin-bottom: 8px;
+}
+
+.cam-list {
+  list-style: none;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 -6px;
+  padding: 0 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+.cam {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.cam:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.cam.is-active {
+  background: var(--hud-lime-soft);
+  border-color: rgba(199, 242, 106, 0.3);
+}
+
+.cam__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--hud-lime);
+}
+
+.cam__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.cam__name {
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cam__sub {
+  font-size: 11px;
+  color: var(--hud-muted);
+}
+
+/* ---------------- 右侧 ---------------- */
+.hud-right {
+  position: absolute;
+  top: 82px;
+  right: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.layers {
+  width: 214px;
+  padding: 12px 14px;
+}
+
+.layer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  cursor: pointer;
+}
+
+.layer + .layer {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.layer sl-icon {
+  color: var(--hud-lime);
+  font-size: 15px;
+}
+
+.layer span {
+  flex: 1;
+}
+
+.map-tools {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px;
+  border-radius: 16px !important;
+}
+
+.map-tools sl-icon-button {
+  font-size: 17px;
+  color: var(--hud-text);
+}
+
+.map-tools sl-icon-button::part(base):hover {
+  color: var(--hud-lime);
+}
+
+.map-tools__sep {
+  width: 22px;
+  height: 1px;
+  margin: 4px 0;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* ---------------- 底部 ---------------- */
+.hud-bottom {
+  position: absolute;
+  left: 352px;
+  right: 18px;
+  bottom: 18px;
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.drone {
+  width: 288px;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--hud-muted);
+}
+
+.drone__body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.drone__body sl-button::part(base) {
+  font-weight: 600;
+}
+
+.drone__meta {
+  display: flex;
+  gap: 16px;
+  text-align: right;
+}
+
+.drone__meta div {
+  display: flex;
+  flex-direction: column;
+  font-size: 11px;
+}
+
+.drone__meta b {
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.slider-row {
+  display: grid;
+  grid-template-columns: 56px 1fr 40px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--hud-muted);
+}
+
+.slider-row b {
+  color: var(--hud-text);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.slider-row sl-range {
+  --track-color-active: var(--hud-lime);
+  --track-color-inactive: rgba(255, 255, 255, 0.12);
+  --thumb-size: 14px;
+}
+
+.is-orbiting .drone {
+  border-color: rgba(199, 242, 106, 0.35);
+}
+
+.floors {
+  width: 318px;
+}
+
+.explode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--hud-muted);
+}
+
+.floor-pick {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.floor-pick::part(button-group) {
+  width: 100%;
+}
+
+.floor-pick sl-radio-button {
+  flex: 1;
+}
+
+.floor-pick sl-radio-button::part(button) {
+  width: 100%;
+}
+
+.floor-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fs {
+  display: grid;
+  grid-template-columns: 38px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.fs.is-active {
+  background: var(--hud-lime-soft);
+}
+
+.fs__k {
+  font-weight: 700;
+  color: var(--hud-lime);
+}
+
+.fs__l {
+  color: var(--hud-muted);
+}
+
+.fs__n {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.detail {
+  position: relative;
+  margin-left: auto;
+  width: 384px;
+  pointer-events: auto;
+}
+
+.detail > :not(.detail__bg) {
+  position: relative;
+}
+
+.detail__bg {
+  position: absolute !important;
+  inset: 0;
+  pointer-events: none;
+}
+
+.detail__title {
+  font-size: 14px;
+  font-weight: 600;
+  max-width: 300px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.detail .card__head {
+  align-items: flex-start;
+}
+
+.detail .card__head .muted {
+  font-size: 11.5px;
+  font-weight: 400;
+  margin-top: 2px;
+}
+
+/* 画中画：中间留空，由 WebGL scissor 视口直接绘制实时取景 */
+.preview {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  border: 1px solid var(--hud-stroke-hi);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+.preview > span {
+  position: absolute;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(10, 12, 9, 0.55);
+  backdrop-filter: blur(6px);
+}
+
+.preview__rec {
+  top: 8px;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 700;
+}
+
+.rec-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--hud-red);
+  animation: hudPulse 1.2s ease-in-out infinite;
+}
+
+.preview__time {
+  right: 8px;
+  bottom: 8px;
+}
+
+.preview__id {
+  top: 8px;
+  right: 8px;
+  color: var(--hud-lime);
+  font-weight: 700;
+}
+
+.detail__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin: 12px 0 10px;
+}
+
+.detail__grid div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+}
+
+.detail__grid b {
+  font-size: 13px;
+}
+
+.detail__actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Shoelace 细节统一磨砂风格 */
+.hud sl-radio-button::part(button) {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--hud-text);
+}
+
+.hud sl-radio-button[checked]::part(button) {
+  background: var(--hud-lime);
+  border-color: var(--hud-lime);
+  color: #1b2210;
+  font-weight: 600;
+}
+
+.hud sl-button[variant='default']::part(base) {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: var(--hud-text);
+}
+
+.hud sl-button[variant='primary']::part(base) {
+  color: #1b2210;
+}
+
+.hud sl-switch {
+  --width: 34px;
+  --height: 18px;
+  --thumb-size: 14px;
+}
+
+.hud sl-switch::part(control) {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: transparent;
+}
+
+.hud sl-switch[checked]::part(control) {
+  background: var(--hud-lime);
+  border-color: var(--hud-lime);
+}
+
+/* 窄屏：隐藏次要卡片，保证三维画面可视 */
+@media (max-width: 1280px) {
+  .chips .chip:nth-child(n + 2):not(.chip--clock) {
+    display: none;
+  }
+  .floors {
+    width: 280px;
+  }
+}
+
+/* ---------------- 拆层浮标 ---------------- */
+.floor-tags {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.floor-tag {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 6px;
+  border-radius: 999px;
+  pointer-events: auto;
+  cursor: pointer;
+  white-space: nowrap;
+  background: rgba(16, 19, 15, 0.72);
+  border: 1px solid var(--hud-stroke-hi);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  font-size: 12px;
+}
+
+.floor-tag::after {
+  content: '';
+  position: absolute;
+  left: -34px;
+  top: 50%;
+  width: 34px;
+  border-top: 1px dashed rgba(199, 242, 106, 0.7);
+}
+
+.floor-tag b {
+  display: grid;
+  place-items: center;
+  min-width: 30px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--hud-lime);
+  color: #1b2210;
+  font-size: 11.5px;
+}
+
+.floor-tag.is-active {
+  border-color: var(--hud-lime);
+}

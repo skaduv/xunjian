@@ -1205,6 +1205,9 @@ function buildE3PeninsulaInteriors({ grp, floorIndex, floorY, slabT, innerH, mat
   }
 }
 
+/** 分层查看的楼层顺序（自下而上），与 getFloorExplodeOffset 的 floorKey 一致 */
+export const FLOOR_VIEW_ORDER = ['1F', '2F', '3F', 'roof', 'floatingCanopy'];
+
 /**
  * 构建整座长三角物理研究中心 5 层可拆解建筑体系
  */
@@ -1447,6 +1450,7 @@ export function buildArchitecture(maxAnisotropy = 16) {
   // 平滑垂直爆炸透视状态机
   let explodeFactor = 0;
   let targetExplode = 0;
+  let floorView = 'all';
   let currentDusk = 0;
   let currentNight = 0;
 
@@ -1474,6 +1478,32 @@ export function buildArchitecture(maxAnisotropy = 16) {
     },
     setExploded(enabled) {
       targetExplode = enabled ? 1 : 0;
+    },
+    /**
+     * 分层查看：'all' 显示整楼；'1F' / '2F' / '3F' / 'roof' 仅保留该层及以下楼层，剖切掉上部楼层露出室内
+     */
+    setFloorView(key) {
+      const order = FLOOR_VIEW_ORDER;
+      const idx = order.indexOf(key);
+      floorView = idx < 0 ? 'all' : key;
+      const layers = [floor1, floor2, floor3, roofGroup, canopyGroup];
+      layers.forEach((grp, i) => {
+        grp.visible = floorView === 'all' || i <= idx;
+      });
+      return floorView;
+    },
+    getFloorView() {
+      return floorView;
+    },
+    /** 当前处于剖切隐藏状态的楼层键集合（供摄像头/防区图层联动隐藏） */
+    getHiddenFloorKeys() {
+      const hidden = new Set();
+      if (floorView === 'all') return hidden;
+      const idx = FLOOR_VIEW_ORDER.indexOf(floorView);
+      FLOOR_VIEW_ORDER.forEach((k, i) => {
+        if (i > idx) hidden.add(k);
+      });
+      return hidden;
     },
     getExplodeFactor() {
       return explodeFactor;

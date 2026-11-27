@@ -230,6 +230,12 @@ export function buildSafetyZonesLayer(maxAnisotropy = 8) {
         entry.meshGrp.position.y = entry.config.baseY + dy;
       }
     },
+    /** 分层剖切联动：隐藏位于被剖切楼层上的室内防区 */
+    setHiddenFloors(hiddenSet) {
+      for (const entry of zoneEntries) {
+        entry.meshGrp.visible = !(entry.config.isIndoor && hiddenSet.has(entry.config.floor));
+      }
+    },
     getZoneCenter(zoneId) {
       const found = zoneEntries.find((e) => e.config.id === zoneId);
       if (!found) return null;

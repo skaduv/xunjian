@@ -890,9 +890,12 @@ export function buildCameraAndFovLayers() {
     nvr.faultBeacon.visible = nvr.isOffline;
   }
 
+  let hiddenFloors = new Set();
+
   function syncDynamicTransforms(explodeFactor) {
     for (const [floorKey, grp] of floorStaticGroups.entries()) {
       grp.position.y = getFloorExplodeOffset(floorKey, explodeFactor);
+      grp.visible = !hiddenFloors.has(floorKey);
     }
 
     for (const entry of cameraMap.values()) {
@@ -905,12 +908,15 @@ export function buildCameraAndFovLayers() {
 
       entry.head.position.y = y;
       entry.fovGrp.position.y = y;
+      const hiddenByFloor = entry.config.isIndoor && hiddenFloors.has(entry.config.floor);
+      entry.head.visible = !hiddenByFloor;
+      entry.fovGrp.visible = !hiddenByFloor;
 
       if (entry.isBullet) {
         tmpObj.position.set(x, y, z);
         tmpObj.rotation.order = 'YXZ';
         tmpObj.rotation.set(-entry.config.pitch, entry.config.yaw, 0);
-        tmpObj.scale.set(1, 1, 1);
+        tmpObj.scale.setScalar(hiddenByFloor ? 0 : 1);
         tmpObj.updateMatrix();
         if (bulletBodyInst) bulletBodyInst.setMatrixAt(entry.instanceIdx, tmpObj.matrix);
 
@@ -925,7 +931,7 @@ export function buildCameraAndFovLayers() {
       } else {
         tmpObj.rotation.order = 'XYZ';
         tmpObj.rotation.set(0, 0, 0);
-        tmpObj.scale.set(1, 1, 1);
+        tmpObj.scale.setScalar(hiddenByFloor ? 0 : 1);
         if (domeCollarInst) {
           tmpObj.position.set(x, y + 0.16, z);
           tmpObj.updateMatrix();
@@ -943,6 +949,8 @@ export function buildCameraAndFovLayers() {
       const dy = getFloorExplodeOffset(nvr.config.floor, explodeFactor);
       const y = nvr.baseY + dy;
       nvr.nodeGrp.position.y = y;
+      const nvrHidden = hiddenFloors.has(nvr.config.floor);
+      nvr.nodeGrp.visible = !nvrHidden;
 
       if (nvrLedInst) {
         tmpObj.position.set(
@@ -951,7 +959,7 @@ export function buildCameraAndFovLayers() {
           nvr.config.nodePosition[2] + 0.59
         );
         tmpObj.rotation.set(0, 0, 0);
-        tmpObj.scale.set(1, 1, 1);
+        tmpObj.scale.setScalar(nvrHidden ? 0 : 1);
         tmpObj.updateMatrix();
         nvrLedInst.setMatrixAt(nvr.instanceIdx, tmpObj.matrix);
       }
@@ -1007,6 +1015,11 @@ export function buildCameraAndFovLayers() {
     syncExplosion(explodeFactor) {
       currentExplodeFactor = explodeFactor;
       syncDynamicTransforms(explodeFactor);
+    },
+    /** 分层剖切联动：被剖切楼层上的室内摄像头/NVR 硬件一并隐藏 */
+    setHiddenFloors(hiddenSet) {
+      hiddenFloors = new Set(hiddenSet || []);
+      syncDynamicTransforms(currentExplodeFactor);
     },
     getCameraWorldPosition(cameraId) {
       const entry = cameraMap.get(cameraId);

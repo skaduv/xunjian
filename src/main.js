@@ -12,6 +12,9 @@ import { buildCameraAndFovLayers } from './security/CameraLayer.js';
 import { buildSafetyZonesLayer } from './security/SafetyZonesLayer.js';
 import { buildHighlightLayer } from './security/HighlightLayer.js';
 import { createCampusTwinAPI } from './api/CampusTwinAPI.js';
+import { createSurveillanceSystem } from './security/SurveillanceSystem.js';
+import { EXTRA_SURVEILLANCE_CAMERAS } from './config/surveillanceCameras.js';
+import { mountHud } from './hud/Hud.js';
 import { applyOuterMist } from './core/OuterMist.js';
 
 /**
@@ -69,6 +72,14 @@ function bootstrap() {
   const highlightLayer = buildHighlightLayer();
   studio.scene.add(cameraLayer.camerasGroup, cameraLayer.fovGroup, safetyZonesLayer.group, highlightLayer.group);
 
+  // 5.1 可复用摄像头组件编排层：存量 12 路补齐点位/视锥，新增 4 路连同立杆硬件一并生成
+  //     （旧版整体视锥图层由组件化视锥接管，保持隐藏）
+  cameraLayer.fovGroup.visible = false;
+  const surveillance = createSurveillanceSystem();
+  surveillance.adoptLegacy(cameraLayer);
+  for (const spec of EXTRA_SURVEILLANCE_CAMERAS) surveillance.add(spec);
+  studio.scene.add(surveillance.group);
+
   // 6. 注册昼夜模式联动回调（覆盖建筑室内外灯光、全园区路灯与羽化光池、动态车辆大灯/光束、湖滨地标与底座辉光）
   studio.onLightingChange((duskFactor, nightFactor) => {
     architecture.setDuskFactor(duskFactor, nightFactor);
@@ -85,7 +96,39 @@ function bootstrap() {
     cameraLayer,
     safetyZonesLayer,
     highlightLayer,
+    surveillance,
   });
+
+  // 点选摄像头点位（区分拖拽与单击）
+  const canvas = studio.renderer.domElement;
+  let downAt = null;
+  const onPointerDown = (e) => {
+    downAt = { x: e.clientX, y: e.clientY };
+  };
+  const onPointerUp = (e) => {
+    if (!downAt || e.button !== 0) return;
+    const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y);
+    downAt = null;
+    if (moved > 4) return;
+    const rect = canvas.getBoundingClientRect();
+    const ndc = new THREE.Vector2(
+      ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      -((e.clientY - rect.top) / rect.height) * 2 + 1
+    );
+    const hit = surveillance.pick(ndc, studio.camera);
+    if (hit) api.selectCamera(hit);
+  };
+  canvas.addEventListener('pointerdown', onPointerDown);
+  canvas.addEventListener('pointerup', onPointerUp);
+
+  // 画中画：HUD 提供预览窗口矩形，渲染选中摄像头的实时取景
+  let previewRectProvider = null;
+  const setPreviewRectProvider = (fn) => {
+    previewRectProvider = fn;
+  };
+
+  // 磨砂质感控制面板（Shoelace 组件库）
+  const hud = mountHud(document.getElementById('hud-root'), api, { setPreviewRectProvider });
 
   // 支持 URL 参数 ?mode=night / ?mode=dusk 直达夜景/暮光（默认保持白模日间 'day'）
   const initialMode = new URLSearchParams(window.location.search).get('mode');
@@ -131,7 +174,7 @@ function bootstrap() {
       Math.abs((architecture.isExploded() ? 1 : 0) - architecture.getExplodeFactor()) > 0.001;
     const minInterval = interactive
       ? ACTIVE_INTERVAL
-      : cameraLayer.hasActiveAlarms() || highlightLayer.hasActive()
+      : cameraLayer.hasActiveAlarms() || highlightLayer.hasActive() || surveillance.hasActivity()
         ? 1000 / 30
         : IDLE_INTERVAL;
 
@@ -150,6 +193,7 @@ function bootstrap() {
       cameraLayer.syncExplosion(explodeFactor);
       safetyZonesLayer.syncExplosion(explodeFactor);
       highlightLayer.syncExplosion(explodeFactor);
+      surveillance.syncExplosion(explodeFactor);
       studio.markShadowsDirty();
       lastExplodeFactor = explodeFactor;
     }
@@ -159,8 +203,18 @@ function bootstrap() {
     vehicleTraffic.update(dt, studio.duskFactor);
     cameraLayer.update(elapsed);
     highlightLayer.update(elapsed);
+    surveillance.update(elapsed);
+
+    const selectedCam = surveillance.getSelected();
+    const rect = selectedCam && previewRectProvider ? previewRectProvider() : null;
+    studio.setInset(
+      rect
+        ? { camera: surveillance.getPreviewCamera(selectedCam), rect, hide: [surveillance.group] }
+        : null
+    );
 
     studio.render();
+    hud.tick?.(elapsed);
   }
 
   rafId = requestAnimationFrame(animate);
@@ -178,11 +232,14 @@ function bootstrap() {
     cancelAnimationFrame(rafId);
     document.removeEventListener('visibilitychange', onVisChange);
     window.removeEventListener('keydown', onKeyDown);
+    canvas.removeEventListener('pointerdown', onPointerDown);
+    canvas.removeEventListener('pointerup', onPointerUp);
+    hud.dispose?.();
     studio.dispose();
   };
 
   window.__campusTwinCleanup = cleanup;
-  if (import.meta.env.DEV) window.__campusDebug = { studio, architecture, landscapeRoot, highlightLayer, THREE };
+  if (import.meta.env.DEV) window.__campusDebug = { studio, architecture, landscapeRoot, highlightLayer, surveillance, THREE };
   if (import.meta.hot) {
     import.meta.hot.dispose(cleanup);
   }
