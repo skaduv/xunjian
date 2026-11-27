@@ -10,7 +10,9 @@ import { buildVehicleTrafficSystem } from './landscape/VehicleTrafficSystem.js';
 import { buildVegetationSystem } from './landscape/VegetationSystem.js';
 import { buildCameraAndFovLayers } from './security/CameraLayer.js';
 import { buildSafetyZonesLayer } from './security/SafetyZonesLayer.js';
+import { buildHighlightLayer } from './security/HighlightLayer.js';
 import { createCampusTwinAPI } from './api/CampusTwinAPI.js';
+import { applyOuterMist } from './core/OuterMist.js';
 
 /**
  * 长三角物理研究中心（IOPLY）3D 数字孪生底座主入口
@@ -54,13 +56,18 @@ function bootstrap() {
   batchStaticMeshes(lake.group);
   batchStaticMeshes(plinth.group);
 
+  // 外域树木/车辆与外围地形同步溶入云雾，杜绝云海里的灰色幽灵树
+  applyOuterMist(vegetation);
+  applyOuterMist(vehicleTraffic.group);
+
   landscapeRoot.add(terrain.group, lake.group, roadsAndParking.group, vehicleTraffic.group, vegetation);
   studio.scene.add(landscapeRoot);
 
   // 5. 预埋安防业务 3D 图层（12 路 3D 摄像头 + 视锥投影体 + 四类安全防区）
   const cameraLayer = buildCameraAndFovLayers();
   const safetyZonesLayer = buildSafetyZonesLayer(aniso);
-  studio.scene.add(cameraLayer.camerasGroup, cameraLayer.fovGroup, safetyZonesLayer.group);
+  const highlightLayer = buildHighlightLayer();
+  studio.scene.add(cameraLayer.camerasGroup, cameraLayer.fovGroup, safetyZonesLayer.group, highlightLayer.group);
 
   // 6. 注册昼夜模式联动回调（覆盖建筑室内外灯光、全园区路灯与羽化光池、动态车辆大灯/光束、湖滨地标与底座辉光）
   studio.onLightingChange((duskFactor, nightFactor) => {
@@ -77,6 +84,7 @@ function bootstrap() {
     landscapeRoot,
     cameraLayer,
     safetyZonesLayer,
+    highlightLayer,
   });
 
   // 支持 URL 参数 ?mode=night / ?mode=dusk 直达夜景/暮光（默认保持白模日间 'day'）
@@ -123,7 +131,7 @@ function bootstrap() {
       Math.abs((architecture.isExploded() ? 1 : 0) - architecture.getExplodeFactor()) > 0.001;
     const minInterval = interactive
       ? ACTIVE_INTERVAL
-      : cameraLayer.hasActiveAlarms()
+      : cameraLayer.hasActiveAlarms() || highlightLayer.hasActive()
         ? 1000 / 30
         : IDLE_INTERVAL;
 
@@ -141,6 +149,7 @@ function bootstrap() {
     if (Math.abs(explodeFactor - lastExplodeFactor) > 0.0001) {
       cameraLayer.syncExplosion(explodeFactor);
       safetyZonesLayer.syncExplosion(explodeFactor);
+      highlightLayer.syncExplosion(explodeFactor);
       studio.markShadowsDirty();
       lastExplodeFactor = explodeFactor;
     }
@@ -149,6 +158,7 @@ function bootstrap() {
     plinth.update(elapsed, studio.duskFactor, studio.nightFactor);
     vehicleTraffic.update(dt, studio.duskFactor);
     cameraLayer.update(elapsed);
+    highlightLayer.update(elapsed);
 
     studio.render();
   }
@@ -172,6 +182,7 @@ function bootstrap() {
   };
 
   window.__campusTwinCleanup = cleanup;
+  if (import.meta.env.DEV) window.__campusDebug = { studio, architecture, landscapeRoot, highlightLayer, THREE };
   if (import.meta.hot) {
     import.meta.hot.dispose(cleanup);
   }

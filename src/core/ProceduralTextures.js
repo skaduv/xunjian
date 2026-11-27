@@ -73,8 +73,8 @@ export function createMowedLawnTexture(maxAnisotropy = 8) {
 
     const img = ctx.createImageData(size, size);
     const d = img.data;
-    const baseR = 54; // #36662d 浓郁自然航拍叶绿素翡翠绿（对齐参考图健康深绿草甸）
-    const baseG = 102;
+    const baseR = 59; // #3b5f2d（略降饱和、偏橄榄，贴近航拍实景；原 #36662d） 浓郁自然航拍叶绿素翡翠绿（对齐参考图健康深绿草甸）
+    const baseG = 95;
     const baseB = 45;
     const stripeCycles = 4; // 整数周期：沿 X/Y 边界严格闭合，彻底消除 tile 接缝
 

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { PLINTH_CONFIG } from '../config/campusConfig.js';
 import { createMowedLawnTexture } from '../core/ProceduralTextures.js';
+import { sampleLongpanCarry } from '../core/TerrainField.js';
 
 /**
  * 无界自然翡翠外围地貌 + 地形自适应飘逸风缕体积航拍云海系统（QA #44 深度精修版）
@@ -276,14 +277,16 @@ export function distOutsideCampus(x, z) {
  */
 export function sampleOuterTerrainHeight(x, z) {
   const dOut = distOutsideCampus(x, z);
-  if (dOut <= 22) return 0;
+  // 龙蟠山跨越园区东边界的连续山脊（消除边界处的人工深沟）
+  const carry = sampleLongpanCarry(x, z, dOut);
+  if (dOut <= 22) return carry;
 
   const roadDist = minDistToExtendedRoads(x, z);
   if (roadDist <= 26) return 0;
   const mRoad = smoothstep(26, 56, roadDist);
 
   const mEdge = smoothstep(22, 75, dOut) * smoothstep(520, 320, dOut);
-  if (mEdge <= 1e-4) return 0;
+  if (mEdge <= 1e-4) return carry * mRoad;
 
   const roll = Math.max(
     0,
@@ -294,13 +297,13 @@ export function sampleOuterTerrainHeight(x, z) {
       5.2
   );
 
-  // 东侧龙蟠山外延柔缓丘陵余脉
+  // 东侧龙蟠山外延柔缓丘陵余脉（起点内移并加宽，与园区内山体无缝衔接）
   const east =
-    smoothstep(250, 340, x) *
-    smoothstep(520, 380, x) *
+    smoothstep(215, 330, x) *
+    smoothstep(560, 390, x) *
     (12.0 * Math.exp(-Math.pow((z + 55) / 145, 2)) + 10.5 * Math.exp(-Math.pow((z - 85) / 130, 2)));
 
-  return Math.max(0, (roll + east) * mEdge * mRoad);
+  return Math.max(carry * mRoad, Math.max(0, (roll + east) * mEdge * mRoad));
 }
 
 /**
@@ -387,7 +390,7 @@ function buildBoundlessOuterTerrain(sharedUniforms) {
       const bp = perimeter[s];
       const wx = bp.x + bp.nx * dist;
       const wz = bp.z + bp.nz * dist;
-      const wy = k === 0 ? -0.05 : dist <= 22.0 ? 0.0 : sampleOuterTerrainHeight(wx, wz);
+      const wy = k === 0 ? sampleOuterTerrainHeight(wx, wz) - 0.05 : sampleOuterTerrainHeight(wx, wz);
 
       const idx = k * P + s;
       positions[idx * 3] = wx;
@@ -421,10 +424,22 @@ function buildBoundlessOuterTerrain(sharedUniforms) {
 
   // 强制内收唇 (k=0) 与精准边界环 (k=1) 法线严格垂直向上 (0,1,0)，彻底消除边界 1px 光照折痕
   const normAttr = geo.attributes.normal;
-  for (let k = 0; k <= 1; k++) {
-    for (let s = 0; s < P; s++) {
-      normAttr.setXYZ(k * P + s, 0, 1, 0);
+  // 以解析高程场的中心差分重建法线：外围粗环网格与园区内龙蟠山细网格在边界处法线完全一致，消除折痕
+  const eps = 1.5;
+  for (let i = 0; i < vertCount; i++) {
+    const x = positions[i * 3];
+    const z = positions[i * 3 + 2];
+    const k = Math.floor(i / P);
+    if (k <= 1 && positions[i * 3 + 1] < 0.05) {
+      normAttr.setXYZ(i, 0, 1, 0);
+      continue;
     }
+    const hx = sampleOuterTerrainHeight(x + eps, z) - sampleOuterTerrainHeight(x - eps, z);
+    const hz = sampleOuterTerrainHeight(x, z + eps) - sampleOuterTerrainHeight(x, z - eps);
+    const nx = -hx / (2 * eps);
+    const nz = -hz / (2 * eps);
+    const inv = 1 / Math.hypot(nx, 1, nz);
+    normAttr.setXYZ(i, nx * inv, inv, nz * inv);
   }
   normAttr.needsUpdate = true;
 
@@ -438,7 +453,7 @@ function buildBoundlessOuterTerrain(sharedUniforms) {
     envMapIntensity: 0.85,
   });
 
-  terrainMat.customProgramCacheKey = () => 'ioply-boundless-outer-terrain-v3';
+  terrainMat.customProgramCacheKey = () => 'ioply-boundless-outer-terrain-v4-farmland';
 
   // 将外围参考图色板预先由 sRGB 精确转换至线性空间传入着色器
   const colWoodFloor = new THREE.Color('#22481f');
@@ -454,6 +469,10 @@ function buildBoundlessOuterTerrain(sharedUniforms) {
     shader.uniforms.uColMidMeadow = { value: colMidMeadow };
     shader.uniforms.uColSunField = { value: colSunField };
     shader.uniforms.uColDeepShade = { value: colDeepShade };
+    shader.uniforms.uColCropYoung = { value: new THREE.Color('#58782f') };
+    shader.uniforms.uColCropDark = { value: new THREE.Color('#34522a') };
+    shader.uniforms.uColCropRipe = { value: new THREE.Color('#7a7c3c') };
+    shader.uniforms.uColFallow = { value: new THREE.Color('#5e5a3a') };
 
     shader.vertexShader = shader.vertexShader
       .replace(
@@ -480,6 +499,10 @@ function buildBoundlessOuterTerrain(sharedUniforms) {
         uniform vec3 uColMidMeadow;
         uniform vec3 uColSunField;
         uniform vec3 uColDeepShade;
+        uniform vec3 uColCropYoung;
+        uniform vec3 uColCropDark;
+        uniform vec3 uColCropRipe;
+        uniform vec3 uColFallow;
         varying vec3 vOuterWorldPos;
 
         float ot_hash( vec2 p ) {
@@ -529,6 +552,24 @@ function buildBoundlessOuterTerrain(sharedUniforms) {
           vec3 countryCol = mix( uColWoodFloor, uColMidMeadow, smoothstep( 0.12, 0.58, toneT ) );
           countryCol = mix( countryCol, uColSunField, smoothstep( 0.58, 0.94, toneT ) * ( 0.62 + 0.38 * plotWarm ) );
           countryCol = mix( uColDeepShade, countryCol, mix( 0.93, 1.0, hedgeBand ) );
+
+          // 外域农田肌理（对齐航拍参考：不同作物色块 + 种植行 + 田埂林带），约 62% 地块为耕地，其余保持草甸
+          float isField = step( 0.38, plotSeed ) * smoothstep( 40.0, 95.0, otDOut );
+          if ( isField > 0.0 ) {
+            float pick = fract( plotWarm * 7.13 + plotSeed * 3.71 );
+            vec3 cropCol = pick < 0.30 ? uColCropYoung : pick < 0.52 ? uColCropDark : pick < 0.80 ? uColCropRipe : uColFallow;
+            cropCol *= 0.90 + 0.20 * fract( plotSeed * 13.7 );
+            // 种植行：每块地随机横/纵向，约 3.2m 行距；远处按屏幕导数淡出，防止摩尔纹
+            float rowCoord = ( plotWarm > 0.5 ? cellUv.x * plotScale.x : cellUv.y * plotScale.y ) / 3.2;
+            float rowAA = 1.0 - smoothstep( 0.25, 0.8, fwidth( rowCoord ) );
+            float rows = 0.5 + 0.5 * sin( rowCoord * 6.2831853 );
+            cropCol *= mix( 1.0, mix( 0.88, 1.07, rows ), rowAA );
+            // 田埂：地块边缘一圈深色林带/土埂
+            float edgeD = min( min( cellUv.x, 1.0 - cellUv.x ), min( cellUv.y, 1.0 - cellUv.y ) );
+            float bund = 1.0 - smoothstep( 0.012, 0.035, edgeD );
+            cropCol = mix( cropCol, uColDeepShade * 0.9, bund * 0.85 );
+            countryCol = mix( countryCol, cropCol, isField * mix( 0.55, 0.92, macroBio ) );
+          }
 
           // 丘陵坡度与坡顶自然叶绿素亮暗层次
           float hillT = smoothstep( 0.5, 11.5, vOuterWorldPos.y );
