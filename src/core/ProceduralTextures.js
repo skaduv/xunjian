@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 
 /**
- * 精工偏白模程序化纹理库（轻量化内存占用，参考 IOPLY_Campus_WhiteModel.glb 与工业硬件白模质感）
- * - 极简克制的低饱和白模色阶：矿物浅灰绿绒面草坪、暖灰微粒道路（标线直接烘焙）、香槟浅橡木百叶、清透冰青水波法线
- * - 纹理尺寸严格控制在 256–512，大幅降低显存占用同时保持高各向异性锐度
+ * 精工微缩棚拍程序化纹理库（温暖瓷砂 / 丝缎陶灰 / 温润暖石 / KKAA 原木 / 深石板沥青 / 鼠尾草绿绒草坪）
+ * - 彻底告别漂白惨白！色阶精准匹配工业设计微缩模型棚拍标准，赋予画面丰富明暗层次与材质触感
+ * - 严格保留全部已有导出函数名与参数签名（100% 向后兼容）
+ * - 完整保留 v2.1 1024×512 2:1 锐利 1px 星夜棚拍背景
  */
 
 function makeCanvas(width, height) {
@@ -29,37 +30,61 @@ function hash2d(x, y) {
   return n - Math.floor(n);
 }
 
+function smoothNoise2d(x, y, period) {
+  const xi = Math.floor(x);
+  const yi = Math.floor(y);
+  const xf = x - xi;
+  const yf = y - yi;
+  const u = xf * xf * (3 - 2 * xf);
+  const v = yf * yf * (3 - 2 * yf);
+  const x0 = ((xi % period) + period) % period;
+  const y0 = ((yi % period) + period) % period;
+  const x1 = (x0 + 1) % period;
+  const y1 = (y0 + 1) % period;
+  const a = hash2d(x0, y0);
+  const b = hash2d(x1, y0);
+  const c = hash2d(x0, y1);
+  const d = hash2d(x1, y1);
+  return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
+}
+
 /**
- * 1. 偏白模斜纹修剪绒面草坪（低饱和矿物灰绿 #D9E1D6，保留极细腻 45° 修剪暗纹与微绒质感）
+ * 1. 丝缎微缩鼠尾草藓绿草坪（丰富自然的柔和绿意与斜纹修剪条带，彻底告别苍白发灰）
  */
 export function createMowedLawnTexture(maxAnisotropy = 8) {
   const size = 256;
   const { canvas, ctx } = makeCanvas(size, size);
 
-  ctx.fillStyle = '#d7dfd4';
+  ctx.fillStyle = '#819b76';
   ctx.fillRect(0, 0, size, size);
 
+  // 柔和 45° 园林修剪斜纹（高雅微差，绝不刺眼）
   ctx.save();
   ctx.translate(size / 2, size / 2);
   ctx.rotate(-Math.PI / 4);
   const stripeW = 16;
   for (let x = -size; x < size; x += stripeW * 2) {
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.14)';
+    ctx.fillStyle = 'rgba(164, 190, 146, 0.16)';
     ctx.fillRect(x, -size, stripeW, size * 2);
-    ctx.fillStyle = 'rgba(130, 148, 128, 0.10)';
+    ctx.fillStyle = 'rgba(72, 96, 66, 0.16)';
     ctx.fillRect(x + stripeW, -size, stripeW, size * 2);
   }
   ctx.restore();
 
+  // 叠加柔和自然有机色斑与细腻绒面微粒（模拟手工模型植绒草地触感）
   const img = ctx.getImageData(0, 0, size, size);
   const d = img.data;
-  for (let i = 0; i < d.length; i += 4) {
-    const px = (i / 4) % size;
-    const py = Math.floor(i / 4 / size);
-    const n = (hash2d(px, py) - 0.5) * 7;
-    d[i] = Math.min(255, Math.max(0, d[i] + n));
-    d[i + 1] = Math.min(255, Math.max(0, d[i + 1] + n));
-    d[i + 2] = Math.min(255, Math.max(0, d[i + 2] + n));
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = (y * size + x) * 4;
+      const macro = (smoothNoise2d((x / size) * 6, (y / size) * 6, 6) - 0.5) * 14;
+      const mid = (smoothNoise2d((x / size) * 16, (y / size) * 16, 16) - 0.5) * 8;
+      const micro = (hash2d(x, y) - 0.5) * 7;
+      const warmShift = (smoothNoise2d((x / size) * 4 + 1.3, (y / size) * 4 + 2.7, 4) - 0.5) * 6;
+      d[idx] = Math.min(255, Math.max(0, d[idx] + macro * 0.85 + mid * 0.8 + micro + warmShift));
+      d[idx + 1] = Math.min(255, Math.max(0, d[idx + 1] + macro + mid + micro));
+      d[idx + 2] = Math.min(255, Math.max(0, d[idx + 2] + macro * 0.75 + mid * 0.75 + micro - warmShift * 0.4));
+    }
   }
   ctx.putImageData(img, 0, 0);
 
@@ -67,56 +92,63 @@ export function createMowedLawnTexture(maxAnisotropy = 8) {
 }
 
 /**
- * 2. 偏白模建筑级道路纹理（浅冷灰/银灰细粒沥青，标线直接烘焙进 UV，零 Z-Fighting）
+ * 2. 丝缎石板炭灰道路纹理（市政干道深石板灰 + 园区环道暖石墨灰，清晰标线直接烘焙，零 Z-Fighting）
  */
 export function createAsphaltRoadTexture(variant = 'campus', maxAnisotropy = 8) {
   const w = 256;
   const h = 256;
   const { canvas, ctx } = makeCanvas(w, h);
 
-  // 克制高级建筑白模道路灰：市政干道略深，园区环道浅冷灰，与白模无缝融合
-  ctx.fillStyle = variant === 'arterial' ? '#b3bbc4' : variant === 'firelane' ? '#c2c9d1' : '#bcc3cc';
+  // 高级工业设计深石板炭灰，立刻拉开道路与草坪/建筑/路缘石的清晰层次
+  ctx.fillStyle = variant === 'arterial' ? '#484e57' : variant === 'firelane' ? '#5d636d' : '#545b65';
   ctx.fillRect(0, 0, w, h);
 
+  // 柔和车辙与细粒沥青石骨料肌理
   const img = ctx.getImageData(0, 0, w, h);
   const d = img.data;
-  for (let i = 0; i < d.length; i += 4) {
-    const px = (i / 4) % w;
-    const py = Math.floor(i / 4 / w);
-    const grain = (hash2d(px, py) - 0.5) * 8;
-    d[i] = Math.min(255, Math.max(0, d[i] + grain));
-    d[i + 1] = Math.min(255, Math.max(0, d[i + 1] + grain));
-    d[i + 2] = Math.min(255, Math.max(0, d[i + 2] + grain));
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = (y * w + x) * 4;
+      const u = x / w;
+      const track =
+        (Math.exp(-Math.pow((u - 0.28) / 0.08, 2)) + Math.exp(-Math.pow((u - 0.72) / 0.08, 2))) * 3.5;
+      const grain = (hash2d(x, y) - 0.5) * 11;
+      const patch = (smoothNoise2d((x / w) * 8, (y / h) * 8, 8) - 0.5) * 7;
+      const delta = grain + patch + track;
+      d[idx] = Math.min(255, Math.max(0, d[idx] + delta));
+      d[idx + 1] = Math.min(255, Math.max(0, d[idx + 1] + delta));
+      d[idx + 2] = Math.min(255, Math.max(0, d[idx + 2] + delta * 1.03));
+    }
   }
   ctx.putImageData(img, 0, 0);
 
-  // 两侧精致纯白边缘线
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+  // 两侧精致暖白标线
+  ctx.fillStyle = 'rgba(236, 232, 224, 0.88)';
   ctx.fillRect(w * 0.045, 0, w * 0.015, h);
   ctx.fillRect(w * 0.94, 0, w * 0.015, h);
 
   if (variant === 'arterial') {
-    // 柔和香槟金双中线 + 精致虚线分道线
-    ctx.fillStyle = 'rgba(214, 178, 96, 0.85)';
+    // 沉稳琥珀金双黄实线 + 精致暖白虚线分道线
+    ctx.fillStyle = 'rgba(218, 166, 66, 0.90)';
     ctx.fillRect(w * 0.484, 0, w * 0.011, h);
     ctx.fillRect(w * 0.505, 0, w * 0.011, h);
 
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.78)';
+    ctx.fillStyle = 'rgba(236, 232, 224, 0.80)';
     for (let y = 14; y < h; y += 64) {
       ctx.fillRect(w * 0.265, y, w * 0.012, 32);
       ctx.fillRect(w * 0.723, y, w * 0.012, 32);
     }
   } else if (variant === 'firelane') {
-    // 消防通道柔和琥珀边线与中心引导虚线
-    ctx.fillStyle = 'rgba(218, 174, 84, 0.72)';
-    ctx.fillRect(w * 0.072, 0, w * 0.012, h);
-    ctx.fillRect(w * 0.916, 0, w * 0.012, h);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.72)';
+    // 消防通道暖琥珀边线与中心引导虚线
+    ctx.fillStyle = 'rgba(228, 168, 58, 0.86)';
+    ctx.fillRect(w * 0.072, 0, w * 0.013, h);
+    ctx.fillRect(w * 0.915, 0, w * 0.013, h);
+    ctx.fillStyle = 'rgba(236, 232, 224, 0.78)';
     for (let y = 16; y < h; y += 64) {
       ctx.fillRect(w * 0.493, y, w * 0.014, 30);
     }
   } else {
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+    ctx.fillStyle = 'rgba(236, 232, 224, 0.78)';
     for (let y = 16; y < h; y += 64) {
       ctx.fillRect(w * 0.493, y, w * 0.014, 28);
     }
@@ -126,15 +158,27 @@ export function createAsphaltRoadTexture(variant = 'campus', maxAnisotropy = 8) 
 }
 
 /**
- * 3. 偏白模地面停车场烘焙纹理（浅灰石材沥青 + 纯白车位标线 + 冰青新能源充电位标识）
+ * 3. 精工丝缎石板灰地面停车场烘焙纹理（精细颗粒 + 暖白车位标线 + 晶青新能源充电位标识）
  */
 export function createParkingLotTexture(cols = 2, rows = 8, evRowCount = 4, maxAnisotropy = 8) {
   const w = 512;
   const h = 512;
   const { canvas, ctx } = makeCanvas(w, h);
 
-  ctx.fillStyle = '#c4cbd3';
+  ctx.fillStyle = '#59606a';
   ctx.fillRect(0, 0, w, h);
+
+  const img = ctx.getImageData(0, 0, w, h);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const px = (i / 4) % w;
+    const py = Math.floor(i / 4 / w);
+    const grain = (hash2d(px, py) - 0.5) * 9;
+    d[i] = Math.min(255, Math.max(0, d[i] + grain));
+    d[i + 1] = Math.min(255, Math.max(0, d[i + 1] + grain));
+    d[i + 2] = Math.min(255, Math.max(0, d[i + 2] + grain));
+  }
+  ctx.putImageData(img, 0, 0);
 
   const marginX = w * 0.05;
   const marginY = h * 0.04;
@@ -142,8 +186,8 @@ export function createParkingLotTexture(cols = 2, rows = 8, evRowCount = 4, maxA
   const rowH = usableH / rows;
   const stallW = cols === 2 ? w * 0.30 : w * 0.72;
 
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
-  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = 'rgba(234, 230, 222, 0.88)';
+  ctx.lineWidth = 2.6;
 
   const drawBank = (xStart, xEnd, isEvBank) => {
     ctx.beginPath();
@@ -161,8 +205,13 @@ export function createParkingLotTexture(cols = 2, rows = 8, evRowCount = 4, maxA
       ctx.stroke();
 
       if (r < rows && isEvBank && r < evRowCount) {
-        ctx.fillStyle = 'rgba(92, 206, 214, 0.22)';
+        ctx.fillStyle = 'rgba(56, 206, 218, 0.28)';
         ctx.fillRect(xStart + 3, y + 3, xEnd - xStart - 6, rowH - 6);
+        ctx.strokeStyle = 'rgba(110, 232, 240, 0.55)';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(xStart + 5, y + 5, xEnd - xStart - 10, rowH - 10);
+        ctx.strokeStyle = 'rgba(234, 230, 222, 0.88)';
+        ctx.lineWidth = 2.6;
       }
     }
   };
@@ -170,7 +219,7 @@ export function createParkingLotTexture(cols = 2, rows = 8, evRowCount = 4, maxA
   if (cols === 2) {
     drawBank(marginX, marginX + stallW, true);
     drawBank(w - marginX - stallW, w - marginX, false);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.72)';
+    ctx.strokeStyle = 'rgba(234, 230, 222, 0.72)';
     ctx.lineWidth = 2;
     ctx.setLineDash([12, 12]);
     ctx.beginPath();
@@ -186,12 +235,12 @@ export function createParkingLotTexture(cols = 2, rows = 8, evRowCount = 4, maxA
 }
 
 /**
- * 4. 迎宾石材广场铺装纹理（细腻浅白灰花岗岩拼缝）
+ * 4. 温润洞石/花岗岩迎宾广场铺装纹理（暖灰米石拼缝与自然色阶微差）
  */
 export function createPlazaPaverTexture(maxAnisotropy = 8) {
   const size = 256;
   const { canvas, ctx } = makeCanvas(size, size);
-  ctx.fillStyle = '#e3e7ed';
+  ctx.fillStyle = '#a89f92';
   ctx.fillRect(0, 0, size, size);
 
   const cols = 8;
@@ -201,16 +250,32 @@ export function createPlazaPaverTexture(maxAnisotropy = 8) {
   for (let r = 0; r < rows; r++) {
     const offset = (r % 2) * (cw * 0.5);
     for (let c = -1; c <= cols; c++) {
-      const shade = 230 + Math.floor((hash2d(c + 10, r + 20) - 0.5) * 10);
-      ctx.fillStyle = `rgb(${shade}, ${shade + 2}, ${shade + 4})`;
-      ctx.fillRect(c * cw + offset + 1, r * rh + 1, cw - 1.5, rh - 1.5);
+      const n = (hash2d(c + 10, r + 20) - 0.5) * 14;
+      const red = Math.round(201 + n);
+      const grn = Math.round(193 + n * 0.95);
+      const blu = Math.round(181 + n * 0.88);
+      ctx.fillStyle = `rgb(${red}, ${grn}, ${blu})`;
+      ctx.fillRect(c * cw + offset + 1.2, r * rh + 1.2, cw - 2.0, rh - 2.0);
     }
   }
+
+  const img = ctx.getImageData(0, 0, size, size);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const px = (i / 4) % size;
+    const py = Math.floor(i / 4 / size);
+    const speck = (hash2d(px, py) - 0.5) * 6;
+    d[i] = Math.min(255, Math.max(0, d[i] + speck));
+    d[i + 1] = Math.min(255, Math.max(0, d[i + 1] + speck));
+    d[i + 2] = Math.min(255, Math.max(0, d[i + 2] + speck));
+  }
+  ctx.putImageData(img, 0, 0);
+
   return finalizeTexture(canvas, { repeatX: 6, repeatY: 12, srgb: true, anisotropy: maxAnisotropy });
 }
 
 /**
- * 5. 偏白模香槟浅橡木纹铝板百叶纹理（呼应 KKAA 原木调与 IOPLY_Campus_WhiteModel 雅致暖木）
+ * 5. KKAA 温润红雪松/橡木纹铝板百叶纹理（饱满温润原木色阶与细腻木纤维肌理）
  */
 export function createWoodLouverTexture(maxAnisotropy = 8) {
   const w = 256;
@@ -218,53 +283,78 @@ export function createWoodLouverTexture(maxAnisotropy = 8) {
   const { canvas, ctx } = makeCanvas(w, h);
 
   const grad = ctx.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, '#d8cab6');
-  grad.addColorStop(0.5, '#cbb99e');
-  grad.addColorStop(1, '#c0ac90');
+  grad.addColorStop(0, '#b6895e');
+  grad.addColorStop(0.48, '#a87b50');
+  grad.addColorStop(1, '#966a43');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, w, h);
 
+  // 自然横向木纹纤维与柔和年轮明暗变化
   for (let y = 0; y < h; y += 2) {
-    const alpha = 0.03 + hash2d(y, 4.2) * 0.06;
-    ctx.fillStyle = hash2d(y, 9.1) > 0.5 ? `rgba(110, 86, 58, ${alpha})` : `rgba(255, 250, 242, ${alpha})`;
-    ctx.fillRect(0, y, w, 1);
+    const seed = hash2d(y, 4.2);
+    const alpha = 0.04 + seed * 0.09;
+    ctx.fillStyle = hash2d(y, 9.1) > 0.48
+      ? `rgba(74, 48, 26, ${alpha.toFixed(3)})`
+      : `rgba(232, 198, 158, ${(alpha * 0.72).toFixed(3)})`;
+    ctx.fillRect(0, y, w, 1.5);
   }
+
+  // 精致百叶格栅微暗拼缝（提升远景与中景节奏感）
+  const slatStep = 16;
+  for (let y = 0; y < h; y += slatStep) {
+    ctx.fillStyle = 'rgba(58, 38, 22, 0.26)';
+    ctx.fillRect(0, y, w, 1.5);
+    ctx.fillStyle = 'rgba(245, 222, 192, 0.14)';
+    ctx.fillRect(0, y + 1.5, w, 1);
+  }
+
   return finalizeTexture(canvas, { repeatX: 2, repeatY: 2, srgb: true, anisotropy: maxAnisotropy });
 }
 
 /**
- * 6. 雅致浅柚木亲水甲板纹理
+ * 6. 温润蜜柚木亲水甲板纹理（清晰深色木板拼缝与丰富木板色差）
  */
 export function createTeakDeckTexture(maxAnisotropy = 8) {
   const size = 256;
   const { canvas, ctx } = makeCanvas(size, size);
-  ctx.fillStyle = '#cfbfa7';
+  ctx.fillStyle = '#9f764e';
   ctx.fillRect(0, 0, size, size);
 
   const planks = 14;
   const ph = size / planks;
   for (let i = 0; i < planks; i++) {
-    const tone = (hash2d(i, 5.1) - 0.5) * 12;
-    ctx.fillStyle = `rgb(${208 + tone}, ${191 + tone * 0.9}, ${166 + tone * 0.8})`;
-    ctx.fillRect(0, i * ph + 1.5, size, ph - 2);
-    ctx.fillStyle = 'rgba(130, 114, 92, 0.35)';
-    ctx.fillRect(0, i * ph, size, 1.5);
+    const tone = (hash2d(i, 5.1) - 0.5) * 18;
+    const r = Math.round(160 + tone);
+    const g = Math.round(118 + tone * 0.85);
+    const b = Math.round(78 + tone * 0.7);
+    ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+    ctx.fillRect(0, i * ph + 1.6, size, ph - 2.0);
+
+    // 细腻木纹丝
+    ctx.fillStyle = 'rgba(72, 48, 28, 0.12)';
+    ctx.fillRect(0, i * ph + ph * 0.42, size, 1);
+    ctx.fillStyle = 'rgba(235, 200, 160, 0.10)';
+    ctx.fillRect(0, i * ph + ph * 0.72, size, 1);
+
+    // 深色压缝
+    ctx.fillStyle = 'rgba(54, 38, 24, 0.56)';
+    ctx.fillRect(0, i * ph, size, 1.6);
   }
   return finalizeTexture(canvas, { repeatX: 4, repeatY: 4, srgb: true, anisotropy: maxAnisotropy });
 }
 
 /**
- * 7. 克制建筑白模单晶硅光伏阵列纹理（深灰蓝晶格 + 浅银边框）
+ * 7. 精工单晶硅光伏阵列纹理（深靛石板蓝晶格 + 拉丝钛铝边框）
  */
 export function createSolarPanelTexture(maxAnisotropy = 8) {
   const w = 256;
   const h = 128;
   const { canvas, ctx } = makeCanvas(w, h);
 
-  ctx.fillStyle = '#47576a';
+  ctx.fillStyle = '#253345';
   ctx.fillRect(0, 0, w, h);
 
-  ctx.strokeStyle = '#dbe2ea';
+  ctx.strokeStyle = '#9ea5ae';
   ctx.lineWidth = 4;
   ctx.strokeRect(2, 2, w - 4, h - 4);
 
@@ -277,9 +367,9 @@ export function createSolarPanelTexture(maxAnisotropy = 8) {
       const x = 4 + c * cw;
       const y = 4 + r * rh;
       const v = (hash2d(c, r) - 0.5) * 10;
-      ctx.fillStyle = `rgb(${68 + v}, ${84 + v}, ${104 + v})`;
+      ctx.fillStyle = `rgb(${Math.round(38 + v)}, ${Math.round(52 + v)}, ${Math.round(72 + v)})`;
       ctx.fillRect(x + 1, y + 1, cw - 2, rh - 2);
-      ctx.fillStyle = 'rgba(220, 232, 245, 0.25)';
+      ctx.fillStyle = 'rgba(182, 204, 224, 0.22)';
       ctx.fillRect(x + cw * 0.5, y + 1, 1, rh - 2);
     }
   }
@@ -301,14 +391,14 @@ export function createWaterNormalTexture(maxAnisotropy = 4) {
     for (let x = 0; x < size; x++) {
       const u = (x / size) * Math.PI * 2;
       height[y * size + x] =
-        Math.sin(u * 2 + v * 2) * 0.4 +
-        Math.cos(u * 5 - v * 3 + 1.1) * 0.25 +
-        Math.sin(u * 8 + v * 6) * 0.12 +
+        Math.sin(u * 2 + v * 2) * 0.42 +
+        Math.cos(u * 5 - v * 3 + 1.1) * 0.24 +
+        Math.sin(u * 8 + v * 6) * 0.10 +
         Math.cos(u * 3 - v * 7) * 0.14;
     }
   }
 
-  const strength = 1.6;
+  const strength = 1.35;
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const xl = (x - 1 + size) % size;
@@ -327,18 +417,18 @@ export function createWaterNormalTexture(maxAnisotropy = 4) {
   }
   ctx.putImageData(img, 0, 0);
 
-  return finalizeTexture(canvas, { repeatX: 12, repeatY: 10, srgb: false, anisotropy: maxAnisotropy });
+  return finalizeTexture(canvas, { repeatX: 10, repeatY: 8, srgb: false, anisotropy: maxAnisotropy });
 }
 
 /**
- * 9. E3 室内标准篮球体育馆浅枫木地板与柔和白模标线
+ * 9. E3 室内标准篮球体育馆温润枫木地板与石青边区
  */
 export function createBasketballCourtTexture(maxAnisotropy = 8) {
   const w = 512;
   const h = 256;
   const { canvas, ctx } = makeCanvas(w, h);
 
-  ctx.fillStyle = '#9db4c4';
+  ctx.fillStyle = '#486a78';
   ctx.fillRect(0, 0, w, h);
 
   const padX = 36;
@@ -346,17 +436,17 @@ export function createBasketballCourtTexture(maxAnisotropy = 8) {
   const cw = w - padX * 2;
   const ch = h - padY * 2;
 
-  ctx.fillStyle = '#e0cbb0';
+  ctx.fillStyle = '#c79b6b';
   ctx.fillRect(padX, padY, cw, ch);
   for (let y = padY; y < padY + ch; y += 5) {
-    const shade = (hash2d(y, 1.7) - 0.5) * 10;
-    ctx.fillStyle = `rgb(${224 + shade}, ${203 + shade * 0.8}, ${176 + shade * 0.6})`;
+    const shade = (hash2d(y, 1.7) - 0.5) * 12;
+    ctx.fillStyle = `rgb(${Math.round(199 + shade)}, ${Math.round(155 + shade * 0.8)}, ${Math.round(107 + shade * 0.6)})`;
     ctx.fillRect(padX, y, cw, 4);
   }
 
   const keyW = cw * 0.19;
   const keyH = ch * 0.34;
-  ctx.fillStyle = '#7ea6bc';
+  ctx.fillStyle = '#3d7888';
   ctx.fillRect(padX, padY + (ch - keyH) / 2, keyW, keyH);
   ctx.fillRect(padX + cw - keyW, padY + (ch - keyH) / 2, keyW, keyH);
 
@@ -364,7 +454,7 @@ export function createBasketballCourtTexture(maxAnisotropy = 8) {
   ctx.arc(w / 2, h / 2, ch * 0.125, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.strokeStyle = '#ffffff';
+  ctx.strokeStyle = '#f4efe6';
   ctx.lineWidth = 3;
   ctx.strokeRect(padX, padY, cw, ch);
 
@@ -399,16 +489,28 @@ export function createBasketballCourtTexture(maxAnisotropy = 8) {
 }
 
 /**
- * 10. 室内哑光陶瓷白微格地板
+ * 10. 室内温润暖石水磨石微格地板
  */
 export function createInteriorFloorTexture(maxAnisotropy = 8) {
   const size = 256;
   const { canvas, ctx } = makeCanvas(size, size);
-  ctx.fillStyle = '#eff1f5';
+  ctx.fillStyle = '#cfc9bf';
   ctx.fillRect(0, 0, size, size);
 
+  const img = ctx.getImageData(0, 0, size, size);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const px = (i / 4) % size;
+    const py = Math.floor(i / 4 / size);
+    const n = (hash2d(px, py) - 0.5) * 6;
+    d[i] = Math.min(255, Math.max(0, d[i] + n));
+    d[i + 1] = Math.min(255, Math.max(0, d[i + 1] + n));
+    d[i + 2] = Math.min(255, Math.max(0, d[i + 2] + n));
+  }
+  ctx.putImageData(img, 0, 0);
+
   const step = 32;
-  ctx.strokeStyle = 'rgba(175, 184, 196, 0.30)';
+  ctx.strokeStyle = 'rgba(118, 110, 98, 0.28)';
   ctx.lineWidth = 1;
   for (let i = 0; i <= size; i += step) {
     ctx.beginPath();
@@ -424,11 +526,11 @@ export function createInteriorFloorTexture(maxAnisotropy = 8) {
 }
 
 /**
- * 11. 高级棚拍瓷白渐变背景（#F8F9FB -> #DDE2EC）、暮光安防背景与深邃星夜棚拍背景
+ * 11. 温暖瓷砂棚拍无影墙背景（呼应参考图暖象牙瓷砂影调）、暮光安防背景与 v2.1 锐利 1px 星夜棚拍背景
  */
 export function createStudioBackdropTexture(mode = 'day') {
   if (mode === 'night') {
-    // 1024×512 宽屏 2:1 比例深空夜蓝渐变背景，杜绝 16:9 视口下星点被横向拉宽发糊
+    // 1024×512 宽屏 2:1 比例深空夜蓝渐变背景，杜绝 16:9 视口下星点被横向拉宽发糊（保留 v2.1 锐利 1px 星空）
     const w = 1024;
     const h = 512;
     const { canvas, ctx } = makeCanvas(w, h);
@@ -476,20 +578,40 @@ export function createStudioBackdropTexture(mode = 'day') {
     return tex;
   }
 
-  const w = 16;
-  const h = 256;
+  if (mode === 'dusk') {
+    const w = 16;
+    const h = 256;
+    const { canvas, ctx } = makeCanvas(w, h);
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0.0, '#0d1624');
+    grad.addColorStop(0.48, '#18273b');
+    grad.addColorStop(0.78, '#233043');
+    grad.addColorStop(1.0, '#121b28');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.needsUpdate = true;
+    return tex;
+  }
+
+  // 白昼温暖瓷砂棚拍无影墙（柔和垂向暖象牙渐变 + 中心微暖棚拍柔光晕 + 四角温润暗角）
+  const w = 512;
+  const h = 512;
   const { canvas, ctx } = makeCanvas(w, h);
   const grad = ctx.createLinearGradient(0, 0, 0, h);
-  if (mode === 'dusk') {
-    grad.addColorStop(0, '#0f1824');
-    grad.addColorStop(0.5, '#192739');
-    grad.addColorStop(1, '#121c29');
-  } else {
-    grad.addColorStop(0, '#F8F9FB');
-    grad.addColorStop(0.58, '#EDF0F5');
-    grad.addColorStop(1, '#DDE2EC');
-  }
+  grad.addColorStop(0.0, '#f3eee8');
+  grad.addColorStop(0.52, '#eae2d9');
+  grad.addColorStop(1.0, '#dbd1c6');
   ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+
+  const keyGlow = ctx.createRadialGradient(w * 0.44, h * 0.40, 24, w * 0.5, h * 0.46, w * 0.62);
+  keyGlow.addColorStop(0.0, 'rgba(255, 252, 247, 0.42)');
+  keyGlow.addColorStop(0.55, 'rgba(252, 246, 238, 0.12)');
+  keyGlow.addColorStop(1.0, 'rgba(202, 191, 178, 0.14)');
+  ctx.fillStyle = keyGlow;
   ctx.fillRect(0, 0, w, h);
 
   const tex = new THREE.CanvasTexture(canvas);
@@ -594,7 +716,6 @@ export function createNightWindowGlowTexture(maxAnisotropy = 4) {
     const warmMode = hash2d(b, 3.7);
     const intensity = 0.72 + hash2d(b, 9.4) * 0.28;
 
-    // 区分 4000K 实验室暖白（清爽偏米白）与 3000K 讨论/办公区琥珀暖金
     const topCol =
       warmMode > 0.36
         ? `rgba(255, 245, 220, ${(0.98 * intensity).toFixed(2)})`
@@ -608,9 +729,8 @@ export function createNightWindowGlowTexture(maxAnisotropy = 4) {
         ? `rgba(220, 164, 96, ${(0.44 * intensity).toFixed(2)})`
         : `rgba(196, 128, 60, ${(0.42 * intensity).toFixed(2)})`;
 
-    // 垂直顶棚洗墙渐变（上方最亮，贴近楼板自然沉静，勾勒清晰楼层分层）
     const vGrad = ctx.createLinearGradient(0, 0, 0, h);
-    vGrad.addColorStop(0.0, 'rgba(60, 42, 24, 0.65)'); // 顶部楼板投影暗边
+    vGrad.addColorStop(0.0, 'rgba(60, 42, 24, 0.65)');
     vGrad.addColorStop(0.11, topCol);
     vGrad.addColorStop(0.28, topCol);
     vGrad.addColorStop(0.62, midCol);
@@ -619,7 +739,6 @@ export function createNightWindowGlowTexture(maxAnisotropy = 4) {
     ctx.fillStyle = vGrad;
     ctx.fillRect(x0 + 2, 0, bayW - 4, h);
 
-    // 顶棚内嵌格栅灯盘高光条（近看可见实验室顶灯韵律）
     const fixtureCount = 3;
     const fxStep = (bayW - 10) / fixtureCount;
     for (let f = 0; f < fixtureCount; f++) {
@@ -628,14 +747,82 @@ export function createNightWindowGlowTexture(maxAnisotropy = 4) {
       ctx.fillRect(fx, 10, fxStep * 0.62, 7);
     }
 
-    // 中部微弱实验台/隔断剪影层次（营造纵深感而非空壳发光）
     ctx.fillStyle = 'rgba(92, 62, 34, 0.24)';
     ctx.fillRect(x0 + bayW * 0.14, h * 0.72, bayW * 0.72, h * 0.2);
 
-    // 房间隔墙细暗缝（让长立面呈现建筑分间节奏）
     ctx.fillStyle = 'rgba(28, 22, 18, 0.78)';
     ctx.fillRect(x0, 0, 3.5, h);
   }
 
   return finalizeTexture(canvas, { repeatX: 1, repeatY: 1, srgb: true, anisotropy: maxAnisotropy });
+}
+
+/**
+ * 16. 温润预制暖石/清水陶土肌理（可选辅助纹理：赋予大面石墙与建筑构件细腻矿物触感）
+ */
+export function createWarmStoneTexture(maxAnisotropy = 8) {
+  const size = 256;
+  const { canvas, ctx } = makeCanvas(size, size);
+  ctx.fillStyle = '#c8c1b6';
+  ctx.fillRect(0, 0, size, size);
+
+  const img = ctx.getImageData(0, 0, size, size);
+  const d = img.data;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = (y * size + x) * 4;
+      const macro = (smoothNoise2d((x / size) * 5, (y / size) * 5, 5) - 0.5) * 10;
+      const fine = (hash2d(x, y) - 0.5) * 6;
+      const delta = macro + fine;
+      d[idx] = Math.min(255, Math.max(0, d[idx] + delta));
+      d[idx + 1] = Math.min(255, Math.max(0, d[idx + 1] + delta * 0.96));
+      d[idx + 2] = Math.min(255, Math.max(0, d[idx + 2] + delta * 0.9));
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+
+  return finalizeTexture(canvas, { repeatX: 4, repeatY: 4, srgb: true, anisotropy: maxAnisotropy });
+}
+
+/**
+ * 17. 精密拉丝钛铝/阳极金属纹理（用于硬件底座压边、散热鳍片与屋顶机电外壳）
+ */
+export function createBrushedMetalTexture(baseHex = '#b8b2a8', maxAnisotropy = 8) {
+  const w = 256;
+  const h = 128;
+  const { canvas, ctx } = makeCanvas(w, h);
+  ctx.fillStyle = baseHex;
+  ctx.fillRect(0, 0, w, h);
+
+  for (let y = 0; y < h; y++) {
+    const v = hash2d(y, 13.7);
+    const alpha = 0.025 + v * 0.045;
+    ctx.fillStyle = v > 0.5 ? `rgba(255, 252, 246, ${alpha.toFixed(3)})` : `rgba(34, 38, 44, ${alpha.toFixed(3)})`;
+    ctx.fillRect(0, y, w, 1);
+  }
+  return finalizeTexture(canvas, { repeatX: 4, repeatY: 2, srgb: true, anisotropy: maxAnisotropy });
+}
+
+/**
+ * 18. 柔和奶油感接触阴影 AO 圆盘贴图（用于树木、车辆、小品接地接触阴影）
+ */
+export function createContactShadowTexture(maxAnisotropy = 4) {
+  const size = 128;
+  const { canvas, ctx } = makeCanvas(size, size);
+  const half = size * 0.5;
+  const grad = ctx.createRadialGradient(half, half, 0, half, half, half);
+  grad.addColorStop(0.0, 'rgba(38, 32, 28, 0.72)');
+  grad.addColorStop(0.38, 'rgba(42, 36, 30, 0.44)');
+  grad.addColorStop(0.72, 'rgba(46, 40, 34, 0.14)');
+  grad.addColorStop(1.0, 'rgba(46, 40, 34, 0.0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+
+  return finalizeTexture(canvas, {
+    repeatX: 1,
+    repeatY: 1,
+    srgb: true,
+    anisotropy: maxAnisotropy,
+    wrap: THREE.ClampToEdgeWrapping,
+  });
 }
