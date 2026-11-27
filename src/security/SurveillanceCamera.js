@@ -21,7 +21,7 @@ import * as THREE from 'three';
 
 export const CAMERA_STATE_STYLES = {
   // 与 HUD 设计令牌一致：中性石墨底 + 电光蓝品牌色，异常态才使用语义色
-  online: { color: '#4d9fff', label: '在线', fov: '#5aaeff', fovOpacity: 0.15, pulse: false },
+  online: { color: '#13b5ea', label: '在线', fov: '#3fd0f0', fovOpacity: 0.15, pulse: false },
   offline: { color: '#8b93a1', label: '离线', fov: '#8b93a1', fovOpacity: 0.06, pulse: false },
   muted: { color: '#aab2bf', label: '静默', fov: '#aab2bf', fovOpacity: 0.08, pulse: false },
   alarm_critical: { color: '#f87171', label: '紧急告警', fov: '#ff6b6b', fovOpacity: 0.22, pulse: true, speed: 1.6 },
@@ -60,34 +60,47 @@ function drawPinTexture(color, selected) {
   g.shadowBlur = 18;
   g.shadowOffsetY = 6;
   pinPath(g, cx, cy, r);
-  g.fillStyle = 'rgba(16, 18, 22, 0.92)';
+  g.fillStyle = '#f7f9fc';
   g.fill();
   g.restore();
 
   // 玻璃高光
   const sheen = g.createLinearGradient(0, cy - r, 0, cy + r);
-  sheen.addColorStop(0, 'rgba(255, 255, 255, 0.16)');
-  sheen.addColorStop(0.55, 'rgba(255, 255, 255, 0.02)');
+  sheen.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
+  sheen.addColorStop(1, 'rgba(208, 218, 232, 0.9)');
   pinPath(g, cx, cy, r);
   g.fillStyle = sheen;
   g.fill();
 
-  g.lineWidth = selected ? 6 : 4;
-  g.strokeStyle = color;
+  g.lineWidth = selected ? 5 : 2;
+  g.strokeStyle = selected ? color : 'rgba(255, 255, 255, 0.95)';
   pinPath(g, cx, cy, r);
   g.stroke();
 
   // 内圈状态色实心圆 + 摄像头图标
+  // 内圈：状态色发光圆片（参考亚克力内嵌发光图标）
+  g.save();
+  g.shadowColor = color;
+  g.shadowBlur = 14;
   g.beginPath();
   g.arc(cx, cy, r * 0.62, 0, Math.PI * 2);
-  g.fillStyle = color;
+  const core = g.createLinearGradient(0, cy - r * 0.62, 0, cy + r * 0.62);
+  core.addColorStop(0, color);
+  core.addColorStop(1, color);
+  g.fillStyle = core;
   g.fill();
+  g.restore();
+  g.beginPath();
+  g.arc(cx, cy - r * 0.18, r * 0.5, Math.PI * 1.1, Math.PI * 1.9);
+  g.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+  g.lineWidth = 3;
+  g.stroke();
 
   const s = r / 44;
   g.save();
   g.translate(cx, cy);
   g.scale(s, s);
-  g.fillStyle = 'rgba(12, 14, 18, 0.95)';
+  g.fillStyle = '#ffffff';
   roundRect(g, -14, -8, 19, 16, 3.5);
   g.fill();
   g.beginPath();
@@ -225,7 +238,7 @@ function buildFrustum(spec) {
     vertexShader: FRUSTUM_VERT,
     fragmentShader: FRUSTUM_FRAG,
     uniforms: {
-      uColor: { value: new THREE.Color('#4d9fff') },
+      uColor: { value: new THREE.Color('#3fd0f0') },
       uOpacity: { value: 0.16 },
       uTime: { value: 0 },
     },
@@ -246,7 +259,7 @@ function buildFrustum(spec) {
   }
   const edgeGeo = new THREE.BufferGeometry();
   edgeGeo.setAttribute('position', new THREE.Float32BufferAttribute(edgePts, 3));
-  const edgeMat = new THREE.LineBasicMaterial({ color: '#4d9fff', transparent: true, opacity: 0.75, depthWrite: false });
+  const edgeMat = new THREE.LineBasicMaterial({ color: '#3fd0f0', transparent: true, opacity: 0.75, depthWrite: false });
   const edges = new THREE.LineSegments(edgeGeo, edgeMat);
   edges.name = 'FrustumEdges';
   edges.renderOrder = 21;
@@ -371,7 +384,7 @@ export function createSurveillanceCamera(rawSpec, opts = {}) {
   const footprintGeo = new THREE.BufferGeometry();
   footprintGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(6 * 3), 3));
   const footprintMat = new THREE.MeshBasicMaterial({
-    color: '#4d9fff',
+    color: '#3fd0f0',
     transparent: true,
     opacity: 0.2,
     depthWrite: false,
@@ -387,7 +400,7 @@ export function createSurveillanceCamera(rawSpec, opts = {}) {
   footprintLineGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(5 * 3), 3));
   const footprintLine = new THREE.Line(
     footprintLineGeo,
-    new THREE.LineBasicMaterial({ color: '#4d9fff', transparent: true, opacity: 0.9, depthWrite: false })
+    new THREE.LineBasicMaterial({ color: '#3fd0f0', transparent: true, opacity: 0.9, depthWrite: false })
   );
   footprintLine.frustumCulled = false;
   footprintLine.renderOrder = 19;
@@ -419,7 +432,7 @@ export function createSurveillanceCamera(rawSpec, opts = {}) {
     new THREE.Vector3(spec.position[0], spec.position[1] + spec.markerHeight, spec.position[2]),
   ]);
   const leaderMat = new THREE.LineDashedMaterial({
-    color: '#4d9fff',
+    color: '#3fd0f0',
     dashSize: 0.5,
     gapSize: 0.35,
     transparent: true,
@@ -431,7 +444,7 @@ export function createSurveillanceCamera(rawSpec, opts = {}) {
   leader.renderOrder = 39;
 
   const ringMat = new THREE.MeshBasicMaterial({
-    color: '#4d9fff',
+    color: '#3fd0f0',
     transparent: true,
     opacity: 0.0,
     depthWrite: false,

@@ -8,7 +8,7 @@
  *
  * 面板只通过 window.CampusTwin API 驱动三维场景，不直接触碰 three.js 对象。
  */
-import '@shoelace-style/shoelace/dist/themes/dark.css';
+import '@shoelace-style/shoelace/dist/themes/light.css';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/icon-button/icon-button.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
@@ -106,7 +106,7 @@ function trendSvg(values) {
   return `<svg viewBox="0 0 ${w} ${h}" class="trend-svg" preserveAspectRatio="none">
       <defs>
         <linearGradient id="barPeak" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0" stop-color="#7cc4ff"/><stop offset="1" stop-color="#3d82f0"/>
+          <stop offset="0" stop-color="#67e8f9"/><stop offset="1" stop-color="#0ea5e9"/>
         </linearGradient>
       </defs>
       <line x1="0" x2="${w}" y1="${h - 0.5}" y2="${h - 0.5}" class="trend-base"/>
@@ -144,7 +144,7 @@ function compassSvg() {
       ${labels}
       <circle cx="100" cy="100" r="88" class="c-progress" data-ref="cProgress" pathLength="100" stroke-dasharray="0 100" transform="rotate(-90 100 100)"/>
       <g class="c-needle" data-ref="cNeedle">
-        <line x1="100" y1="100" x2="100" y2="20" class="c-needle__line"/>
+        <line x1="100" y1="54" x2="100" y2="22" class="c-needle__line"/>
         <circle cx="100" cy="18" r="7" class="c-needle__dot"/>
       </g>
       <text x="100" y="98" class="c-deg" data-ref="cDeg">—</text>
@@ -157,7 +157,7 @@ function compassSvg() {
 export function mountHud(root, api, { setPreviewRectProvider } = {}) {
   if (!root) return { tick() {}, dispose() {} };
   registerHudIcons();
-  document.documentElement.classList.add('sl-theme-dark');
+  document.documentElement.classList.add('sl-theme-light');
   document.body.classList.add('hud-on');
 
   const hud = el(`
@@ -251,17 +251,17 @@ export function mountHud(root, api, { setPreviewRectProvider } = {}) {
           <header class="card__head"><span class="eyebrow">图层</span></header>
           <div class="layers">
             <label class="layer">
-              <span class="layer__icon"><sl-icon name="pin-map"></sl-icon></span>
+              <span class="layer__icon layer__icon--cyan"><sl-icon name="pin-map"></sl-icon></span>
               <span class="layer__text"><b>摄像头点位</b><small>16 路设备定位钉</small></span>
               <sl-switch size="small" checked data-ref="tgMarkers"></sl-switch>
             </label>
             <label class="layer">
-              <span class="layer__icon"><sl-icon name="cone-striped"></sl-icon></span>
+              <span class="layer__icon layer__icon--violet"><sl-icon name="cone-striped"></sl-icon></span>
               <span class="layer__text"><b>全部视锥</b><small>视场范围与地面覆盖区</small></span>
               <sl-switch size="small" data-ref="tgFov"></sl-switch>
             </label>
             <label class="layer">
-              <span class="layer__icon"><sl-icon name="bounding-box"></sl-icon></span>
+              <span class="layer__icon layer__icon--amber"><sl-icon name="bounding-box"></sl-icon></span>
               <span class="layer__text"><b>安全防区</b><small>危化 · 消防 · 临水 · 禁区</small></span>
               <sl-switch size="small" data-ref="tgZones"></sl-switch>
             </label>
@@ -474,7 +474,14 @@ export function mountHud(root, api, { setPreviewRectProvider } = {}) {
           .join('')
       : '<li class="cams__empty">没有匹配的摄像头</li>';
 
-    ref.camList.querySelector('.cam.is-active')?.scrollIntoView({ block: 'nearest' });
+    requestAnimationFrame(() => {
+      const act = ref.camList.querySelector('.cam.is-active');
+      if (!act) return;
+      const lr = ref.camList.getBoundingClientRect();
+      const ar = act.getBoundingClientRect();
+      if (ar.top < lr.top) ref.camList.scrollTop += ar.top - lr.top - 4;
+      else if (ar.bottom > lr.bottom) ref.camList.scrollTop += ar.bottom - lr.bottom + 4;
+    });
 
     renderEvents(cams);
     renderDetail(cams, selected);
