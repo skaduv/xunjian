@@ -14,7 +14,8 @@ import { SECURITY_GROUPS } from '../config/campusConfig.js';
  * - setCameraState(cameraId, state)
  * - setNvrOffline(nvrId, isOffline)
  * - setLightingMode('day' | 'dusk' | 'night')
- * - getScreenPosition(cameraId)
+ * - getScreenPosition(cameraId | groupId | {x,y,z})
+ * - highlightGroup(groupId | null)  选中楼栋发光描边 + 定位气泡（getScreenPosition(groupId) 返回气泡屏幕坐标，供 HUD 信息卡跟随）
  */
 
 export function createCampusTwinAPI({
@@ -23,6 +24,7 @@ export function createCampusTwinAPI({
   landscapeRoot,
   cameraLayer,
   safetyZonesLayer,
+  highlightLayer,
 }) {
   const layerMap = {
     cameras: cameraLayer.camerasGroup,
@@ -103,6 +105,17 @@ export function createCampusTwinAPI({
       return true;
     },
 
+    highlightGroup(groupId, options = {}) {
+      const active = highlightLayer ? highlightLayer.setHighlight(groupId || null) : null;
+      if (active && options.fly) api.flyToGroup(active, options);
+      studio.wake(600);
+      return active;
+    },
+
+    getHighlightedGroup() {
+      return highlightLayer ? highlightLayer.getHighlight() : null;
+    },
+
     resetView(options = {}) {
       studio.resetView(options.duration ?? 950);
       return true;
@@ -154,7 +167,9 @@ export function createCampusTwinAPI({
       if (typeof targetIdOrVec === 'string') {
         worldPos =
           cameraLayer.getCameraWorldPosition(targetIdOrVec) ||
-          safetyZonesLayer.getZoneCenter(targetIdOrVec);
+          safetyZonesLayer.getZoneCenter(targetIdOrVec) ||
+          highlightLayer?.getAnchor(targetIdOrVec) ||
+          null;
       } else if (targetIdOrVec && typeof targetIdOrVec === 'object') {
         worldPos = new THREE.Vector3(
           Number(targetIdOrVec.x) || 0,

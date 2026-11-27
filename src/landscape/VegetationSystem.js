@@ -1751,10 +1751,23 @@ export function buildVegetationSystem() {
     return true;
   };
 
+  // 外域树木外缘收口：云海覆盖区（dOut>~225m）不再布树，180–225m 渐疏。
+  // 既消除顶视角下云雾里的"幽灵树"，又省掉一部分外域树冠三角形。
+  const OUTER_TREE_LIMIT = 225;
+  const outerTreeCulled = (x, z, dOut) => {
+    if (dOut > OUTER_TREE_LIMIT) return true;
+    if (dOut > 180) {
+      const h = Math.abs(Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1;
+      return h > THREE.MathUtils.lerp(1.0, 0.35, smoothstep(180, OUTER_TREE_LIMIT, dOut));
+    }
+    return false;
+  };
+
   const tryAddOuterBroadleaf = ({ x, z, scale, rot, species, minSpacing = 7.2, allowBorderBridge = false }) => {
     if (isBlockedForOuterTree(x, z, { allowBorderBridge })) return false;
-    if (!canPlaceTreeWithSpacing(x, z, minSpacing)) return false;
     const dOut = signedDistOutsideCampus(x, z);
+    if (outerTreeCulled(x, z, dOut)) return false;
+    if (!canPlaceTreeWithSpacing(x, z, minSpacing)) return false;
     const { y, slope, normal } = sampleTerrainInfo(x, z);
     broadleafTrees.push({
       x,
@@ -1776,8 +1789,9 @@ export function buildVegetationSystem() {
 
   const tryAddOuterConifer = ({ x, z, scale, rot, minSpacing = 7.0, allowBorderBridge = false }) => {
     if (isBlockedForOuterTree(x, z, { allowBorderBridge })) return false;
-    if (!canPlaceTreeWithSpacing(x, z, minSpacing)) return false;
     const dOut = signedDistOutsideCampus(x, z);
+    if (outerTreeCulled(x, z, dOut)) return false;
+    if (!canPlaceTreeWithSpacing(x, z, minSpacing)) return false;
     const { y, slope, normal } = sampleTerrainInfo(x, z);
     conifers.push({ x, z, y, slope, normal, scale, rot, isOuter: true, dOut });
     placedTreePositions.push({ x, z });
@@ -2113,7 +2127,9 @@ export function buildVegetationSystem() {
     const h = sampleTotalElevation(x, z);
     const hillDamp = h > 7.5 ? THREE.MathUtils.lerp(1.0, 0.80, smoothstep(7.5, 16.5, h)) : 1.0;
     const mistDamp = dOut > 230 ? THREE.MathUtils.lerp(1.0, 0.84, smoothstep(230, 294, dOut)) : 1.0;
-    return rawScale * hillDamp * mistDamp;
+    // 丘陵上的外域树冠顶必须压在低层云海（离地 ≥13.5m）之下，否则俯视时树冠刺出云层成"幽灵树"
+    const veilCap = h > 4 ? THREE.MathUtils.lerp(2.0, 1.05, smoothstep(4, 12, h)) : 2.0;
+    return Math.min(rawScale * hillDamp * mistDamp, veilCap);
   };
 
   // Approximate inner municipal road centerlines (strictly for selecting outer-side border-bridging pockets)

@@ -51,7 +51,7 @@ export class StudioScene {
     this.renderer.shadowMap.needsUpdate = true;
 
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.96;
+    this.renderer.toneMappingExposure = 0.93;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.appendChild(this.renderer.domElement);
 
@@ -322,7 +322,7 @@ export class StudioScene {
       fillIntensity: 0.21,
       rimColor: new THREE.Color('#dff2e6'),
       rimIntensity: 0.20,
-      exposure: 0.96,
+      exposure: 0.93,
       envIntensity: 0.44,
       fogColor: new THREE.Color('#dde5e0'),
       fogNear: 1220,

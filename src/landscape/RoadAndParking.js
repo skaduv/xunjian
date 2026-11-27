@@ -2132,7 +2132,7 @@ export function buildRoadsAndParking(maxAnisotropy = 8) {
     roughness: 0.4,
   });
 
-  const islandTurfMat = new THREE.MeshStandardMaterial({ color: '#36662d', roughness: 0.85, metalness: 0.0 });
+  const islandTurfMat = new THREE.MeshStandardMaterial({ color: '#3b5f2d', roughness: 0.85, metalness: 0.0 });
 
   // 共享各主干道与内部环道样条控制点（与 HardwarePlinth.js / VegetationSystem.js / VehicleTrafficSystem.js 严格 1:1 同步）
   const zhongguancunPts = [

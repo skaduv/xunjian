@@ -7,6 +7,7 @@ import {
   createMowedLawnTexture,
   createTeakDeckTexture,
 } from '../core/ProceduralTextures.js';
+import { sampleLongpanHeight } from '../core/TerrainField.js';
 
 /**
  * 博物馆级工业微缩园区微地形、晶莹水池与精工景观构筑物（对齐 Art Spec #9 与 Joint Report #11 全部修复）：
@@ -89,32 +90,7 @@ export function sampleSWHillHeight(x, z) {
   return subtleTerrace(smoothH, 1.15);
 }
 
-export function sampleLongpanHeight(x, z) {
-  if (x < 164) return 0;
-  const westMask = smoothstep(166, 186, x);
-
-  const peaks = [
-    { cx: 222, cz: -78, rx: 48, rz: 82, h: 22.0 },
-    { cx: 226, cz: 72, rx: 44, rz: 78, h: 18.5 },
-    { cx: 234, cz: -4, rx: 32, rz: 48, h: 12.0 },
-  ];
-  let raw = 0;
-  for (const p of peaks) {
-    const nx = (x - p.cx) / p.rx;
-    const nz = (z - p.cz) / p.rz;
-    const r2 = nx * nx + nz * nz;
-    if (r2 < 1.35) {
-      const val = Math.exp(-r2 * 2.15) * p.h;
-      raw = Math.max(raw, val);
-    }
-  }
-  const hw = PLINTH_CONFIG.width * 0.5 - 3.5;
-  const hd = PLINTH_CONFIG.depth * 0.5 - 3.5;
-  const edgeFadeX = smoothstep(hw + 2.0, hw - 10.0, x);
-  const edgeFadeZ = smoothstep(hd + 2.0, hd - 14.0, Math.abs(z));
-  const h = raw * westMask * edgeFadeX * edgeFadeZ;
-  return subtleTerrace(h, 1.85);
-}
+export { sampleLongpanHeight };
 
 export function sampleGroundElevation(x, z) {
   return Math.max(sampleSWHillHeight(x, z), sampleLongpanHeight(x, z));
@@ -185,7 +161,7 @@ function buildSculptedSWHillPark(mats, warmAccentMat, landmarkPoolMat) {
   hillGeo.computeVertexNormals();
 
   // 丰茂健康深翠航拍微地形着色（#36662d 坡脚无缝融坪 -> #32602a -> #244f22 -> #497d35 日照翠顶 + 自然向阳坡面光影）
-  const colLawnBase = new THREE.Color('#36662d');
+  const colLawnBase = new THREE.Color('#3b5f2d');
   const colLow = new THREE.Color('#32602a');
   const colMid = new THREE.Color('#244f22');
   const colHigh = new THREE.Color('#497d35');
@@ -490,9 +466,25 @@ function buildSculptedLongpanMountain() {
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.setIndex(indices);
   geo.computeVertexNormals();
+  // 与外围地形同一套解析中心差分法线，保证跨界山脊光照连续
+  {
+    const pa = geo.attributes.position;
+    const na = geo.attributes.normal;
+    const e = 1.5;
+    for (let i = 0; i < pa.count; i++) {
+      const x = pa.getX(i);
+      const z = pa.getZ(i);
+      if (rawHeights[i] < 0.04) continue;
+      const nx = -(sampleLongpanHeight(x + e, z) - sampleLongpanHeight(x - e, z)) / (2 * e);
+      const nz = -(sampleLongpanHeight(x, z + e) - sampleLongpanHeight(x, z - e)) / (2 * e);
+      const inv = 1 / Math.hypot(nx, 1, nz);
+      na.setXYZ(i, nx * inv, inv, nz * inv);
+    }
+    na.needsUpdate = true;
+  }
 
   // 丰茂健康深翠航拍龙蟠山着色（#36662d 坡脚无缝融坪 -> #32602a -> #244f22 深谷苔绿 -> #497d35 晴翠山脊 + 自然坡向光影）
-  const colLawnBase = new THREE.Color('#36662d');
+  const colLawnBase = new THREE.Color('#3b5f2d');
   const colLow = new THREE.Color('#32602a');
   const colMid = new THREE.Color('#244f22');
   const colHigh = new THREE.Color('#497d35');
@@ -503,6 +495,7 @@ function buildSculptedLongpanMountain() {
   const posAttr = geo.attributes.position;
   const normAttr = geo.attributes.normal;
   const colors = new Float32Array(posAttr.count * 3);
+  const uvs = new Float32Array(posAttr.count * 2);
 
   for (let i = 0; i < posAttr.count; i++) {
     const vx = posAttr.getX(i);
@@ -531,15 +524,24 @@ function buildSculptedLongpanMountain() {
       tmpCol.multiplyScalar(0.85);
     }
 
-    colors[i * 3] = tmpCol.r;
-    colors[i * 3 + 1] = tmpCol.g;
-    colors[i * 3 + 2] = tmpCol.b;
+    // 东边界 34m 内回归草坪基色（与园区外龙蟠山余脉的草坪贴图同色），山脊跨界无色阶断层
+    const edgeBlend = smoothstep(PLINTH_CONFIG.width * 0.5 - 34, PLINTH_CONFIG.width * 0.5 - 2, vx);
+    if (edgeBlend > 0) tmpCol.lerp(colLawnBase, edgeBlend);
+
+    // 顶点色改为"相对草坪基色"的倍率，与外围地形共用同一张草坪贴图：山脚与边界处 = 草坪本身，零色差零纹理断层
+    colors[i * 3] = Math.min(2.5, tmpCol.r / colLawnBase.r);
+    colors[i * 3 + 1] = Math.min(2.5, tmpCol.g / colLawnBase.g);
+    colors[i * 3 + 2] = Math.min(2.5, tmpCol.b / colLawnBase.b);
+    uvs[i * 2] = (vx + PLINTH_CONFIG.width * 0.5) / PLINTH_CONFIG.width;
+    uvs[i * 2 + 1] = (vz + PLINTH_CONFIG.depth * 0.5) / PLINTH_CONFIG.depth;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
 
   const mesh = new THREE.Mesh(
     geo,
     new THREE.MeshStandardMaterial({
+      map: createMowedLawnTexture(4),
       vertexColors: true,
       roughness: 0.86,
       metalness: 0.0,
