@@ -301,19 +301,8 @@ function buildIndustrialCoolingUnit(materials, geos) {
       fanPod.add(strut);
     }
 
-    // 9 叶曲面弯叶旋转叶轮（深石墨叶片 + 紫铜轴毂 + 钛银端帽，标记 noMerge 保持平滑独立旋转）
-    const impeller = new THREE.Group();
-    impeller.userData.noMerge = true;
-    impeller.position.y = 0.48;
-    const hub = new THREE.Mesh(geos.hubGeo, materials.copperPipe);
-    const hubCap = new THREE.Mesh(geos.hubCapGeo, titaniumMat);
-    hubCap.position.y = 0.14;
-    const bladesMesh = new THREE.Mesh(geos.combinedBladesGeo, materials.impellerMetal);
-    bladesMesh.castShadow = false;
-    impeller.add(hub, hubCap, bladesMesh);
-
-    fanPod.add(impeller);
-    impellers.push(impeller);
+    // 记录叶轮在冷却机组局部坐标系中的挂载点，由外部 3 个共享 InstancedMesh 统一合批驱动（42 Draw Calls -> 3）
+    impellers.push({ localX: fx, localY: 1.32 + 0.48, localZ: 0 });
     unit.add(fanPod);
   }
 
@@ -337,7 +326,6 @@ export function buildRoofAndCanopies(materials) {
   const roofY = ELEVATIONS.ROOF_Y;
   const roofSlabT = 0.48;
   const roofTopY = roofY + roofSlabT;
-  const animatedImpellers = [];
 
   const unitScale = 1.26;
   // 预计算全部 7 组冷却机组的屋面安全净空包络（用于 A2 光伏与步道避让）
@@ -823,15 +811,79 @@ export function buildRoofAndCanopies(materials) {
     roofGroup.add(footInst);
   }
 
-  // 5. 布置 7 组 RTX 风格精工工业风冷却风罩（底部严密坐落于 roofTopY，含旋转叶轮动画注册）
+  // 5. 布置 7 组 RTX 风格精工工业风冷却风罩（底部严密坐落于 roofTopY，14 组旋转叶轮合批为 3 个共享 InstancedMesh：42 -> 3 Draw Calls）
   const coolingGeos = createCoolingUnitSharedGeos();
+  const impellerLocalVec = new THREE.Vector3();
+  const impellerSpecs = [];
+
   for (const cfg of ROOF_COOLING_UNITS) {
     const { unit, impellers } = buildIndustrialCoolingUnit(materials, coolingGeos);
     unit.position.set(cfg.x, roofTopY, cfg.z);
     unit.rotation.y = cfg.rotY;
     unit.scale.setScalar(unitScale);
+    unit.updateMatrix();
     roofGroup.add(unit);
-    animatedImpellers.push(...impellers);
+
+    for (const imp of impellers) {
+      impellerLocalVec.set(imp.localX, imp.localY, imp.localZ).applyMatrix4(unit.matrix);
+      const impIdx = impellerSpecs.length;
+      impellerSpecs.push({
+        x: impellerLocalVec.x,
+        y: impellerLocalVec.y,
+        z: impellerLocalVec.z,
+        angle: cfg.rotY,
+        speed: 2.6 + (impIdx % 3) * 0.35,
+      });
+    }
+  }
+
+  let syncImpellers = null;
+  if (impellerSpecs.length > 0) {
+    const impCount = impellerSpecs.length;
+    const titaniumMat = materials.brushedTitanium || materials.fanShroud;
+
+    const hubInst = new THREE.InstancedMesh(coolingGeos.hubGeo, materials.copperPipe, impCount);
+    hubInst.name = 'CoolingImpellerHubs';
+    hubInst.userData.noMerge = true;
+    hubInst.frustumCulled = false;
+
+    const capInst = new THREE.InstancedMesh(coolingGeos.hubCapGeo, titaniumMat, impCount);
+    capInst.name = 'CoolingImpellerCaps';
+    capInst.userData.noMerge = true;
+    capInst.frustumCulled = false;
+
+    const bladesInst = new THREE.InstancedMesh(coolingGeos.combinedBladesGeo, materials.impellerMetal, impCount);
+    bladesInst.name = 'CoolingImpellerBlades';
+    bladesInst.castShadow = false;
+    bladesInst.userData.noMerge = true;
+    bladesInst.frustumCulled = false;
+
+    roofGroup.add(hubInst, capInst, bladesInst);
+
+    const impDummy = new THREE.Object3D();
+    const capOffsetY = 0.14 * unitScale;
+
+    syncImpellers = (dt) => {
+      for (let i = 0; i < impCount; i++) {
+        const sp = impellerSpecs[i];
+        if (dt > 0) sp.angle += dt * sp.speed;
+        impDummy.position.set(sp.x, sp.y, sp.z);
+        impDummy.rotation.set(0, sp.angle, 0);
+        impDummy.scale.setScalar(unitScale);
+        impDummy.updateMatrix();
+        hubInst.setMatrixAt(i, impDummy.matrix);
+        bladesInst.setMatrixAt(i, impDummy.matrix);
+
+        impDummy.position.y = sp.y + capOffsetY;
+        impDummy.updateMatrix();
+        capInst.setMatrixAt(i, impDummy.matrix);
+      }
+      hubInst.instanceMatrix.needsUpdate = true;
+      capInst.instanceMatrix.needsUpdate = true;
+      bladesInst.instanceMatrix.needsUpdate = true;
+    };
+
+    syncImpellers(0);
   }
 
   // 6. 第 5 层独立「悬浮采光顶」：中央 32m 大入口门廊 + 东侧门洞
@@ -1000,10 +1052,8 @@ export function buildRoofAndCanopies(materials) {
     roofGroup,
     canopyGroup,
     update(dt) {
-      // 屋顶 9 叶曲面弯叶冷却叶轮持续平稳旋转
-      for (let i = 0; i < animatedImpellers.length; i++) {
-        animatedImpellers[i].rotation.y += dt * (2.6 + (i % 3) * 0.35);
-      }
+      // 屋顶 14 组 9 叶曲面弯叶冷却叶轮持续平稳旋转（3 个共享 InstancedMesh 批量更新，0 逐帧 GC 分配）
+      if (syncImpellers) syncImpellers(dt);
     },
   };
 }

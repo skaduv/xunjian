@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {
   ELEVATIONS,
   getFloorExplodeOffset,
@@ -226,14 +227,98 @@ function createSharedHardwareAssets() {
 }
 
 /**
- * 为单路摄像头构建严密贴合建筑/立柱/天花的物理安装支架（根治 A12 / A13 全部悬空）
+ * 规范化待合并几何体（补齐法线/UV/索引，确保 mergeGeometries 零失败且不膨胀顶点）
  */
-function attachMountHardware(head, camCfg, effectivePos, mountSpec, shared) {
+function prepareGeoForMerge(srcGeo, matrix) {
+  const g = srcGeo.clone();
+  for (const attrName of Object.keys(g.attributes)) {
+    if (attrName !== 'position' && attrName !== 'normal' && attrName !== 'uv') {
+      g.deleteAttribute(attrName);
+    }
+  }
+  if (!g.attributes.normal) g.computeVertexNormals();
+  if (!g.attributes.uv) {
+    const count = g.attributes.position.count;
+    g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(count * 2), 2));
+  }
+  if (!g.index) {
+    const count = g.attributes.position.count;
+    const idxArr = count > 65535 ? new Uint32Array(count) : new Uint16Array(count);
+    for (let i = 0; i < count; i++) idxArr[i] = i;
+    g.setIndex(new THREE.BufferAttribute(idxArr, 1));
+  }
+  if (matrix) g.applyMatrix4(matrix);
+  return g;
+}
+
+function mergeBucketGeometries(geos) {
+  if (!geos || geos.length === 0) return null;
+  if (geos.length === 1) return geos[0];
+  const merged = mergeGeometries(geos, false);
+  geos.forEach((g) => g.dispose());
+  return merged;
+}
+
+/**
+ * 创建支持逐实例独立色相 + 逐实例独立 HDR 自发光（aEmissive）的状态灯共享 PBR 材质
+ */
+function createInstancedStatusMaterial() {
+  const mat = new THREE.MeshStandardMaterial({
+    color: '#ffffff',
+    emissive: new THREE.Color('#ffffff'),
+    emissiveIntensity: 1.0,
+    roughness: 0.18,
+  });
+  mat.customProgramCacheKey = () => 'ioply-camera-status-inst-v1';
+  mat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        attribute vec3 aEmissive;
+        varying vec3 vInstEmissive;
+        `
+      )
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        vInstEmissive = aEmissive;
+        `
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        varying vec3 vInstEmissive;
+        `
+      )
+      .replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+        totalEmissiveRadiance = vInstEmissive;
+        `
+      );
+  };
+  return mat;
+}
+
+/**
+ * 收集单路摄像头的物理挂装支架静态几何到对应楼层材质合批桶（根治 A12 / A13 全部悬空）
+ */
+function collectMountHardware(pushStatic, camCfg, effectivePos, mountSpec, shared, headMat) {
+  const partObj = new THREE.Object3D();
+  const worldMat = new THREE.Matrix4();
+  const addPart = (bucketKey, geo, px, py, pz, sx = 1, sy = 1, sz = 1, rx = 0, ry = 0, rz = 0) => {
+    partObj.position.set(px, py, pz);
+    partObj.rotation.set(rx, ry, rz);
+    partObj.scale.set(sx, sy, sz);
+    partObj.updateMatrix();
+    worldMat.multiplyMatrices(headMat, partObj.matrix);
+    pushStatic(bucketKey, geo, worldMat);
+  };
+
   if (!mountSpec || mountSpec.mount === 'pole') {
-    // 室外独立立杆顶部万向横臂转接头
-    const joint = new THREE.Mesh(shared.knuckleGeo, shared.darkGraphiteMat);
-    joint.position.set(0, -0.22, 0);
-    head.add(joint);
+    addPart('darkGraphite', shared.knuckleGeo, 0, -0.22, 0);
     return;
   }
 
@@ -243,46 +328,30 @@ function attachMountHardware(head, camCfg, effectivePos, mountSpec, shared) {
     const startY = camCfg.type === 'dome' ? 0.26 : 0.14;
     const stemH = Math.max(0.08, topLocalY - startY);
 
-    const stem = new THREE.Mesh(shared.stemUnitGeo, shared.darkGraphiteMat);
-    stem.scale.set(1, stemH, 1);
-    stem.position.set(0, startY + stemH * 0.5, 0);
-    head.add(stem);
-
-    const rose = new THREE.Mesh(shared.ceilingFlangeGeo, shared.titaniumTrimMat);
-    rose.position.set(0, topLocalY - 0.04, 0);
-    head.add(rose);
+    addPart('darkGraphite', shared.stemUnitGeo, 0, startY + stemH * 0.5, 0, 1, stemH, 1);
+    addPart('titaniumTrim', shared.ceilingFlangeGeo, 0, topLocalY - 0.04, 0);
     return;
   }
 
   if (mountSpec.mount === 'cantilever') {
     const [ax, ay, az] = mountSpec.anchorOffset;
     const armY = camCfg.type === 'dome' ? 0.30 : 0.18;
-
-    // 水平悬臂段（从相机顶部伸至实心廊道边梁）
     const horizLen = Math.hypot(ax, az);
-    const arm = new THREE.Mesh(
-      new THREE.BoxGeometry(Math.abs(ax) > 0.01 ? Math.abs(ax) + 0.12 : 0.11, 0.10, Math.abs(az) > 0.01 ? Math.abs(az) + 0.12 : 0.11),
-      shared.darkGraphiteMat
+
+    const armGeo = new THREE.BoxGeometry(
+      Math.abs(ax) > 0.01 ? Math.abs(ax) + 0.12 : 0.11,
+      0.10,
+      Math.abs(az) > 0.01 ? Math.abs(az) + 0.12 : 0.11
     );
-    arm.position.set(ax * 0.5, armY, az * 0.5);
-    head.add(arm);
+    addPart('darkGraphite', armGeo, ax * 0.5, armY, az * 0.5);
+    armGeo.dispose();
 
-    // 垂直锚固立管（在廊道实心区向上顶抵上层楼板底面）
     const vertH = Math.max(0.15, ay - armY);
-    const vert = new THREE.Mesh(shared.stemUnitGeo, shared.darkGraphiteMat);
-    vert.scale.set(1.15, vertH, 1.15);
-    vert.position.set(ax, armY + vertH * 0.5, az);
-    head.add(vert);
+    addPart('darkGraphite', shared.stemUnitGeo, ax, armY + vertH * 0.5, az, 1.15, vertH, 1.15);
+    addPart('titaniumTrim', shared.ceilingFlangeGeo, ax, ay - 0.04, az);
 
-    const rose = new THREE.Mesh(shared.ceilingFlangeGeo, shared.titaniumTrimMat);
-    rose.position.set(ax, ay - 0.04, az);
-    head.add(rose);
-
-    // 弯头加强节点
     if (horizLen > 0.05) {
-      const elbow = new THREE.Mesh(shared.knuckleGeo, shared.titaniumTrimMat);
-      elbow.position.set(ax, armY, az);
-      head.add(elbow);
+      addPart('titaniumTrim', shared.knuckleGeo, ax, armY, az);
     }
     return;
   }
@@ -290,131 +359,69 @@ function attachMountHardware(head, camCfg, effectivePos, mountSpec, shared) {
   if (mountSpec.mount === 'wall') {
     const [ax, , az] = mountSpec.anchorOffset;
     const len = Math.hypot(ax, az);
-    const arm = new THREE.Mesh(
-      new THREE.BoxGeometry(0.10, 0.10, len + 0.08),
-      shared.darkGraphiteMat
-    );
-    arm.position.set(ax * 0.5, -0.10, az * 0.5);
-    head.add(arm);
+    const armGeo = new THREE.BoxGeometry(0.10, 0.10, len + 0.08);
+    addPart('darkGraphite', armGeo, ax * 0.5, -0.10, az * 0.5);
+    armGeo.dispose();
 
-    const riser = new THREE.Mesh(shared.stemUnitGeo, shared.darkGraphiteMat);
-    riser.scale.set(0.95, 0.22, 0.95);
-    riser.position.set(0, -0.02, 0);
-    head.add(riser);
-
-    const plate = new THREE.Mesh(shared.wallPlateGeo, shared.titaniumTrimMat);
-    plate.position.set(ax, -0.10, az);
-    head.add(plate);
+    addPart('darkGraphite', shared.stemUnitGeo, 0, -0.02, 0, 0.95, 0.22, 0.95);
+    addPart('titaniumTrim', shared.wallPlateGeo, ax, -0.10, az);
     return;
   }
 
   if (mountSpec.mount === 'column') {
     const [ax, , az] = mountSpec.anchorOffset;
-    const arm = new THREE.Mesh(
-      new THREE.BoxGeometry(Math.abs(ax) + 0.14, 0.11, 0.11),
-      shared.darkGraphiteMat
-    );
-    arm.position.set(ax * 0.5, -0.08, az * 0.5);
-    head.add(arm);
+    const armGeo = new THREE.BoxGeometry(Math.abs(ax) + 0.14, 0.11, 0.11);
+    addPart('darkGraphite', armGeo, ax * 0.5, -0.08, az * 0.5);
+    armGeo.dispose();
 
-    const riser = new THREE.Mesh(shared.stemUnitGeo, shared.darkGraphiteMat);
-    riser.scale.set(0.95, 0.20, 0.95);
-    riser.position.set(0, -0.02, 0);
-    head.add(riser);
-
-    // 环抱中央门廊钢柱的精密抱箍卡环（严密套合柱径 0.36m）
-    const clamp = new THREE.Mesh(shared.columnClampGeo, shared.titaniumTrimMat);
-    clamp.position.set(ax, -0.08, az);
-    head.add(clamp);
+    addPart('darkGraphite', shared.stemUnitGeo, 0, -0.02, 0, 0.95, 0.20, 0.95);
+    addPart('titaniumTrim', shared.columnClampGeo, ax, -0.08, az);
   }
 }
 
 /**
- * 构造单路精工微缩 3D 枪机（bullet）或球机（dome）头部组件
+ * 构造单路摄像头的轻量级定位与告警挂载组（仅在告警时渲染脉冲环与光束，常规状态 0 Draw Call）
+ * 同时将其所有静态外观构件（支架/遮阳罩/饰环/镜头）收集至楼层材质合批桶
  */
-function buildCameraHead(camCfg, effectivePos, mountSpec, shared) {
+function buildCameraHeadShell(camCfg, effectivePos, mountSpec, shared, pushStatic) {
   const head = new THREE.Group();
   head.name = `CamHead_${camCfg.id}`;
+  head.position.set(...effectivePos);
+  head.updateMatrix();
+  const headMat = head.matrix.clone();
 
-  const bodyMat = new THREE.MeshStandardMaterial({
-    color: STATE_STYLES.online.bodyColor,
-    roughness: 0.34,
-    metalness: 0.32,
-  });
-  const statusMat = new THREE.MeshStandardMaterial({
-    color: STATE_STYLES.online.color,
-    emissive: new THREE.Color(STATE_STYLES.online.emissive),
-    emissiveIntensity: STATE_STYLES.online.emissiveIntensity,
-    roughness: 0.18,
-  });
+  collectMountHardware(pushStatic, camCfg, effectivePos, mountSpec, shared, headMat);
 
-  // 物理挂装支架（随 head 一体参与爆炸位移，零悬空）
-  attachMountHardware(head, camCfg, effectivePos, mountSpec, shared);
+  const aimObj = new THREE.Object3D();
+  aimObj.rotation.order = 'YXZ';
+  aimObj.rotation.y = camCfg.yaw;
+  aimObj.rotation.x = -camCfg.pitch;
+  aimObj.updateMatrix();
+  const aimWorldMat = new THREE.Matrix4().multiplyMatrices(headMat, aimObj.matrix);
 
-  // 相机指向器（按 yaw / pitch 朝向监控方向，局部 +Z 为镜头光轴）
-  const aimGroup = new THREE.Group();
-  aimGroup.rotation.order = 'YXZ';
-  aimGroup.rotation.y = camCfg.yaw;
-  aimGroup.rotation.x = -camCfg.pitch;
+  const localObj = new THREE.Object3D();
+  const tmpMat = new THREE.Matrix4();
+  const pushLocal = (parentMat, bucketKey, geo, px, py, pz) => {
+    localObj.position.set(px, py, pz);
+    localObj.rotation.set(0, 0, 0);
+    localObj.scale.set(1, 1, 1);
+    localObj.updateMatrix();
+    tmpMat.multiplyMatrices(parentMat, localObj.matrix);
+    pushStatic(bucketKey, geo, tmpMat);
+  };
 
   if (camCfg.type === 'bullet') {
-    // 缎面瓷灰机身 + 钛银腰带 + 深石墨上挑防雨遮阳罩 + 宝石感光学镜头 + 状态光环
-    const housing = new THREE.Mesh(shared.bulletBodyGeo, bodyMat);
-    housing.castShadow = true;
-    aimGroup.add(housing);
-
-    const trimBand = new THREE.Mesh(shared.bulletBevelBandGeo, shared.titaniumTrimMat);
-    trimBand.position.set(0, 0.02, -0.04);
-    aimGroup.add(trimBand);
-
-    const hood = new THREE.Mesh(shared.bulletHoodGeo, shared.darkGraphiteMat);
-    hood.position.set(0, 0.225, 0.08);
-    aimGroup.add(hood);
-
-    const rearCap = new THREE.Mesh(shared.bulletRearCapGeo, shared.darkGraphiteMat);
-    rearCap.position.set(0, 0, -0.54);
-    aimGroup.add(rearCap);
-
-    const lensBezel = new THREE.Mesh(shared.bulletLensBezelGeo, shared.darkGraphiteMat);
-    lensBezel.position.set(0, -0.01, 0.56);
-    aimGroup.add(lensBezel);
-
-    const lensJewel = new THREE.Mesh(shared.bulletLensJewelGeo, shared.lensGlassMat);
-    lensJewel.position.set(0, -0.01, 0.63);
-    aimGroup.add(lensJewel);
-
-    const ring = new THREE.Mesh(shared.bulletStatusRingGeo, statusMat);
-    ring.position.set(0, -0.01, 0.54);
-    aimGroup.add(ring);
+    pushLocal(aimWorldMat, 'titaniumTrim', shared.bulletBevelBandGeo, 0, 0.02, -0.04);
+    pushLocal(aimWorldMat, 'darkGraphite', shared.bulletHoodGeo, 0, 0.225, 0.08);
+    pushLocal(aimWorldMat, 'darkGraphite', shared.bulletRearCapGeo, 0, 0, -0.54);
+    pushLocal(aimWorldMat, 'darkGraphite', shared.bulletLensBezelGeo, 0, -0.01, 0.56);
+    pushLocal(aimWorldMat, 'lensGlass', shared.bulletLensJewelGeo, 0, -0.01, 0.63);
   } else {
-    // 精工球机：倒角瓷灰法兰基座 + 钛银饰圈 + 熏蓝光学球罩 + 内置镜头瞳仁 + 微距环形状态灯
-    const basePlate = new THREE.Mesh(shared.domeBasePlateGeo, shared.titaniumTrimMat);
-    basePlate.position.y = 0.28;
-    head.add(basePlate);
-
-    const collar = new THREE.Mesh(shared.domeCollarGeo, bodyMat);
-    collar.position.y = 0.16;
-    collar.castShadow = true;
-    head.add(collar);
-
-    const trim = new THREE.Mesh(shared.domeTrimGeo, shared.darkGraphiteMat);
-    trim.position.y = 0.06;
-    head.add(trim);
-
-    const dome = new THREE.Mesh(shared.domeBubbleGeo, shared.lensGlassMat);
-    dome.position.y = 0.08;
-    head.add(dome);
-
-    const pupil = new THREE.Mesh(shared.domePupilGeo, shared.lensCoreMat);
-    pupil.position.set(0, -0.08, 0.10);
-    aimGroup.add(pupil);
-
-    const statusRing = new THREE.Mesh(shared.domeStatusRingGeo, statusMat);
-    statusRing.position.y = 0.08;
-    head.add(statusRing);
+    pushLocal(headMat, 'titaniumTrim', shared.domeBasePlateGeo, 0, 0.28, 0);
+    pushLocal(headMat, 'darkGraphite', shared.domeTrimGeo, 0, 0.06, 0);
+    pushLocal(headMat, 'lensGlass', shared.domeBubbleGeo, 0, 0.08, 0);
+    pushLocal(aimWorldMat, 'lensCore', shared.domePupilGeo, 0, -0.08, 0.10);
   }
-
-  head.add(aimGroup);
 
   // 告警脉冲扩散环（仅 alarm_critical / alarm_order / tamper 状态显示）
   const pulseMat = new THREE.MeshBasicMaterial({
@@ -442,7 +449,7 @@ function buildCameraHead(camCfg, effectivePos, mountSpec, shared) {
   beacon.visible = false;
   head.add(beacon);
 
-  return { head, bodyMat, statusMat, pulseRing, pulseMat, beacon, beaconMat };
+  return { head, pulseRing, pulseMat, beacon, beaconMat };
 }
 
 /**
@@ -516,6 +523,23 @@ export function buildCameraAndFovLayers() {
 
   const shared = createSharedHardwareAssets();
 
+  // 按爆炸楼层（outdoor / 1F / 2F）与材质分组收集静态硬件几何，消除 122 次零散 Draw Call
+  const floorBuckets = new Map();
+  const getFloorBucket = (floorKey) => {
+    if (!floorBuckets.has(floorKey)) {
+      floorBuckets.set(floorKey, {
+        darkGraphite: [],
+        titaniumTrim: [],
+        lensGlass: [],
+        lensCore: [],
+      });
+    }
+    return floorBuckets.get(floorKey);
+  };
+  const makeStaticPusher = (floorKey) => (matKey, srcGeo, matrix) => {
+    getFloorBucket(floorKey)[matKey].push(prepareGeoForMerge(srcGeo, matrix));
+  };
+
   // 解析每路摄像头的最终精准点位与安装方式
   const resolvedCameras = SECURITY_CAMERAS.map((cfg) => {
     const mountSpec = CAMERA_MOUNT_SPECS[cfg.id] || {
@@ -523,108 +547,116 @@ export function buildCameraAndFovLayers() {
       ceilingY: cfg.floor === '2F' ? ELEVATIONS.FLOOR_3_Y : ELEVATIONS.FLOOR_2_Y,
     };
     const effectivePos = mountSpec.overridePos ? [...mountSpec.overridePos] : [...cfg.position];
+    const floorKey = cfg.isIndoor ? cfg.floor : 'outdoor';
     return {
       cfg: { ...cfg, position: effectivePos },
       effectivePos,
       mountSpec,
+      floorKey,
     };
   });
 
-  // 1. A13/A14 修复：仅对真正的室外独立立杆摄像头（CAM-09 / CAM-10 / CAM-11）构建精工立杆与沉地法兰
-  // - CAM-06 改由中央门廊柱抱箍安装，不再重复立杆
-  // - CAM-10 已移出车道至 x=-150.2
-  // - 全部法兰座底延至 y=-0.04（[-0.04, +0.16]），在 0.00 草坪与 0.085 路缘上均零悬浮！
+  // 1. A13/A14 修复：仅对室外独立立杆摄像头（CAM-09 / CAM-10 / CAM-11）合批精工立杆与沉地法兰至 outdoor 静态桶
   const outdoorPoleEntries = resolvedCameras.filter((item) => item.mountSpec.mount === 'pole');
   if (outdoorPoleEntries.length > 0) {
     const poleGeo = new THREE.CylinderGeometry(0.10, 0.15, 1, 12);
     const flangeGeo = new THREE.CylinderGeometry(0.36, 0.42, 0.20, 14);
     const collarGeo = new THREE.CylinderGeometry(0.20, 0.26, 0.14, 12);
-    const poleInst = new THREE.InstancedMesh(poleGeo, shared.darkGraphiteMat, outdoorPoleEntries.length);
-    const flangeInst = new THREE.InstancedMesh(flangeGeo, shared.darkGraphiteMat, outdoorPoleEntries.length);
-    const collarInst = new THREE.InstancedMesh(collarGeo, shared.titaniumTrimMat, outdoorPoleEntries.length);
-    poleInst.castShadow = true;
-    poleInst.receiveShadow = true;
-    flangeInst.receiveShadow = true;
-
+    const pushOutdoor = makeStaticPusher('outdoor');
     const dummy = new THREE.Object3D();
-    outdoorPoleEntries.forEach(({ effectivePos }, idx) => {
+
+    outdoorPoleEntries.forEach(({ effectivePos }) => {
       const h = effectivePos[1] - 0.12;
       // 立杆从 y=-0.02 升至镜头安装座
       dummy.position.set(effectivePos[0], -0.02 + h * 0.5, effectivePos[2]);
       dummy.rotation.set(0, 0, 0);
       dummy.scale.set(1, h, 1);
       dummy.updateMatrix();
-      poleInst.setMatrixAt(idx, dummy.matrix);
+      pushOutdoor('darkGraphite', poleGeo, dummy.matrix);
 
       // 沉地倒角法兰底座（y=0.06, h=0.20 -> [-0.04, +0.16]，彻底根治草坪 0.05m 悬浮）
       dummy.position.set(effectivePos[0], 0.06, effectivePos[2]);
       dummy.scale.set(1, 1, 1);
       dummy.updateMatrix();
-      flangeInst.setMatrixAt(idx, dummy.matrix);
+      pushOutdoor('darkGraphite', flangeGeo, dummy.matrix);
 
       // 拉丝钛银收口套环
       dummy.position.set(effectivePos[0], 0.21, effectivePos[2]);
       dummy.scale.set(1, 1, 1);
       dummy.updateMatrix();
-      collarInst.setMatrixAt(idx, dummy.matrix);
+      pushOutdoor('titaniumTrim', collarGeo, dummy.matrix);
     });
-    poleInst.instanceMatrix.needsUpdate = true;
-    flangeInst.instanceMatrix.needsUpdate = true;
-    collarInst.instanceMatrix.needsUpdate = true;
-    camerasGroup.add(poleInst, flangeInst, collarInst);
+
+    poleGeo.dispose();
+    flangeGeo.dispose();
+    collarGeo.dispose();
   }
 
-  // 2. 构建 12 路精工摄像头实体与对应视锥映射表
+  // 2. 构建 12 路精工摄像头轻量定位壳 + 视锥映射表，并统计枪机/球机动态实例索引
   const cameraMap = new Map();
-  for (const { cfg, effectivePos, mountSpec } of resolvedCameras) {
-    const headBundle = buildCameraHead(cfg, effectivePos, mountSpec, shared);
-    headBundle.head.position.set(...effectivePos);
+  const bulletEntries = [];
+  const domeEntries = [];
+
+  for (const { cfg, effectivePos, mountSpec, floorKey } of resolvedCameras) {
+    const pushStatic = makeStaticPusher(floorKey);
+    const headBundle = buildCameraHeadShell(cfg, effectivePos, mountSpec, shared, pushStatic);
     camerasGroup.add(headBundle.head);
 
     const fovBundle = buildCameraFovFrustum(cfg);
     fovBundle.fovGrp.position.set(...effectivePos);
     fovGroup.add(fovBundle.fovGrp);
 
-    cameraMap.set(cfg.id, {
+    const isBullet = cfg.type === 'bullet';
+    const instanceIdx = isBullet ? bulletEntries.length : domeEntries.length;
+
+    const entry = {
       config: { ...cfg },
       state: cfg.state || 'online',
       preOfflineState: null,
       baseY: effectivePos[1],
+      floorKey,
+      isBullet,
+      instanceIdx,
       ...headBundle,
       ...fovBundle,
-    });
+    };
+
+    cameraMap.set(cfg.id, entry);
+    if (isBullet) bulletEntries.push(entry);
+    else domeEntries.push(entry);
   }
 
-  // 3. 东北机房 3 台精工 19 寸大华 NVR 汇聚节点（拉丝钛银面板 + 散热槽 + 状态光条 + 故障告警环）
+  // 3. 东北机房 3 台精工 19 寸大华 NVR 汇聚节点（静态机箱/面板/散热槽合批至对应楼层桶，状态灯条合批为 InstancedMesh）
   const nvrMap = new Map();
+  const nvrList = [];
   const nvrGroup = new THREE.Group();
   nvrGroup.name = 'NvrCoreNodes';
 
+  const nvrPartObj = new THREE.Object3D();
+  const nvrWorldMat = new THREE.Matrix4();
+  const nvrBaseMat = new THREE.Matrix4();
+
   for (const nvr of NVR_DEVICES) {
+    const floorKey = nvr.floor || '1F';
+    const pushNvrStatic = makeStaticPusher(floorKey);
+
     const nodeGrp = new THREE.Group();
     nodeGrp.position.set(...nvr.nodePosition);
+    nodeGrp.updateMatrix();
+    nvrBaseMat.copy(nodeGrp.matrix);
 
-    const chassis = new THREE.Mesh(shared.nvrChassisGeo, shared.darkGraphiteMat);
-    chassis.position.set(0, 1.32, 0.06);
-    nodeGrp.add(chassis);
+    const addNvrPart = (matKey, geo, px, py, pz) => {
+      nvrPartObj.position.set(px, py, pz);
+      nvrPartObj.rotation.set(0, 0, 0);
+      nvrPartObj.scale.set(1, 1, 1);
+      nvrPartObj.updateMatrix();
+      nvrWorldMat.multiplyMatrices(nvrBaseMat, nvrPartObj.matrix);
+      pushNvrStatic(matKey, geo, nvrWorldMat);
+    };
 
-    const faceplate = new THREE.Mesh(shared.nvrFaceplateGeo, shared.titaniumTrimMat);
-    faceplate.position.set(0, 1.32, 0.56);
-    nodeGrp.add(faceplate);
-
-    const vent = new THREE.Mesh(shared.nvrVentGeo, shared.darkGraphiteMat);
-    vent.position.set(-0.30, 1.32, 0.585);
-    nodeGrp.add(vent);
-
-    const ledMat = new THREE.MeshStandardMaterial({
-      color: '#10b981',
-      emissive: new THREE.Color('#10b981'),
-      emissiveIntensity: 1.85,
-      roughness: 0.2,
-    });
-    const indicator = new THREE.Mesh(shared.nvrLedBarGeo, ledMat);
-    indicator.position.set(0.28, 1.32, 0.59);
-    nodeGrp.add(indicator);
+    addNvrPart('darkGraphite', shared.nvrChassisGeo, 0, 1.32, 0.06);
+    addNvrPart('titaniumTrim', shared.nvrFaceplateGeo, 0, 1.32, 0.56);
+    addNvrPart('darkGraphite', shared.nvrVentGeo, -0.30, 1.32, 0.585);
 
     const faultMat = new THREE.MeshBasicMaterial({
       color: '#ef4444',
@@ -648,18 +680,154 @@ export function buildCameraAndFovLayers() {
     nodeGrp.add(faultBeacon);
 
     nvrGroup.add(nodeGrp);
-    nvrMap.set(nvr.id, {
+    const nvrEntry = {
       config: { ...nvr },
       isOffline: false,
       baseY: nvr.nodePosition[1],
+      floorKey,
+      instanceIdx: nvrList.length,
       nodeGrp,
-      ledMat,
       faultRing,
       faultMat,
       faultBeacon,
-    });
+    };
+    nvrMap.set(nvr.id, nvrEntry);
+    nvrList.push(nvrEntry);
   }
   camerasGroup.add(nvrGroup);
+
+  // 4. 合并并挂载按楼层划分的静态硬件 Mesh（outdoor / 1F / 2F，共 11 次 Draw Call）
+  const staticMatTable = {
+    darkGraphite: shared.darkGraphiteMat,
+    titaniumTrim: shared.titaniumTrimMat,
+    lensGlass: shared.lensGlassMat,
+    lensCore: shared.lensCoreMat,
+  };
+  const floorStaticGroups = new Map();
+  for (const [floorKey, bucket] of floorBuckets.entries()) {
+    const grp = new THREE.Group();
+    grp.name = `CameraStaticHardware_${floorKey}`;
+    for (const [matKey, geoList] of Object.entries(bucket)) {
+      const merged = mergeBucketGeometries(geoList);
+      if (!merged) continue;
+      const mesh = new THREE.Mesh(merged, staticMatTable[matKey]);
+      mesh.name = `CamStatic_${floorKey}_${matKey}`;
+      if (floorKey === 'outdoor' && matKey === 'darkGraphite') {
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+      }
+      grp.add(mesh);
+    }
+    camerasGroup.add(grp);
+    floorStaticGroups.set(floorKey, grp);
+  }
+
+  // 释放已被合并克隆完毕的临时基础几何体，零显存冗余
+  for (const tempGeo of [
+    shared.knuckleGeo,
+    shared.stemUnitGeo,
+    shared.ceilingFlangeGeo,
+    shared.wallPlateGeo,
+    shared.columnClampGeo,
+    shared.bulletBevelBandGeo,
+    shared.bulletHoodGeo,
+    shared.bulletRearCapGeo,
+    shared.bulletLensBezelGeo,
+    shared.bulletLensJewelGeo,
+    shared.domeBasePlateGeo,
+    shared.domeTrimGeo,
+    shared.domeBubbleGeo,
+    shared.domePupilGeo,
+    shared.nvrChassisGeo,
+    shared.nvrFaceplateGeo,
+    shared.nvrVentGeo,
+  ]) {
+    tempGeo.dispose();
+  }
+
+  // 5. 构建 5 个共享动态状态 InstancedMesh（机身色相 + 逐实例 HDR 自发光状态灯，支持独立告警与爆炸同步）
+  const bodyInstMat = new THREE.MeshStandardMaterial({
+    color: '#ffffff',
+    roughness: 0.34,
+    metalness: 0.32,
+  });
+  const statusInstMat = createInstancedStatusMaterial();
+
+  const bulletBodyInst =
+    bulletEntries.length > 0
+      ? new THREE.InstancedMesh(shared.bulletBodyGeo, bodyInstMat, bulletEntries.length)
+      : null;
+  if (bulletBodyInst) {
+    bulletBodyInst.name = 'BulletCameraBodies';
+    bulletBodyInst.castShadow = true;
+    bulletBodyInst.frustumCulled = false;
+    camerasGroup.add(bulletBodyInst);
+  }
+
+  const domeCollarInst =
+    domeEntries.length > 0
+      ? new THREE.InstancedMesh(shared.domeCollarGeo, bodyInstMat, domeEntries.length)
+      : null;
+  if (domeCollarInst) {
+    domeCollarInst.name = 'DomeCameraCollars';
+    domeCollarInst.castShadow = true;
+    domeCollarInst.frustumCulled = false;
+    camerasGroup.add(domeCollarInst);
+  }
+
+  const bulletEmissiveAttr =
+    bulletEntries.length > 0
+      ? new THREE.InstancedBufferAttribute(new Float32Array(bulletEntries.length * 3), 3)
+      : null;
+  const bulletStatusInst =
+    bulletEntries.length > 0
+      ? (() => {
+          shared.bulletStatusRingGeo.setAttribute('aEmissive', bulletEmissiveAttr);
+          const inst = new THREE.InstancedMesh(shared.bulletStatusRingGeo, statusInstMat, bulletEntries.length);
+          inst.name = 'BulletStatusRings';
+          inst.frustumCulled = false;
+          camerasGroup.add(inst);
+          return inst;
+        })()
+      : null;
+
+  const domeEmissiveAttr =
+    domeEntries.length > 0
+      ? new THREE.InstancedBufferAttribute(new Float32Array(domeEntries.length * 3), 3)
+      : null;
+  const domeStatusInst =
+    domeEntries.length > 0
+      ? (() => {
+          shared.domeStatusRingGeo.setAttribute('aEmissive', domeEmissiveAttr);
+          const inst = new THREE.InstancedMesh(shared.domeStatusRingGeo, statusInstMat, domeEntries.length);
+          inst.name = 'DomeStatusRings';
+          inst.frustumCulled = false;
+          camerasGroup.add(inst);
+          return inst;
+        })()
+      : null;
+
+  const nvrEmissiveAttr =
+    nvrList.length > 0
+      ? new THREE.InstancedBufferAttribute(new Float32Array(nvrList.length * 3), 3)
+      : null;
+  const nvrLedInst =
+    nvrList.length > 0
+      ? (() => {
+          shared.nvrLedBarGeo.setAttribute('aEmissive', nvrEmissiveAttr);
+          const inst = new THREE.InstancedMesh(shared.nvrLedBarGeo, statusInstMat, nvrList.length);
+          inst.name = 'NvrStatusLeds';
+          inst.frustumCulled = false;
+          camerasGroup.add(inst);
+          return inst;
+        })()
+      : null;
+
+  const tmpColor = new THREE.Color();
+  const tmpEmissive = new THREE.Color();
+  const tmpObj = new THREE.Object3D();
+  const tmpLocalObj = new THREE.Object3D();
+  const tmpMat = new THREE.Matrix4();
 
   function normalizeState(state) {
     return STATE_ALIASES[state] || state;
@@ -669,10 +837,27 @@ export function buildCameraAndFovLayers() {
     const resolved = normalizeState(state);
     const style = STATE_STYLES[resolved] || STATE_STYLES.online;
     entry.state = resolved;
-    entry.bodyMat.color.set(style.bodyColor);
-    entry.statusMat.color.set(style.color);
-    entry.statusMat.emissive.set(style.emissive);
-    entry.statusMat.emissiveIntensity = style.emissiveIntensity;
+
+    const bodyInst = entry.isBullet ? bulletBodyInst : domeCollarInst;
+    const statusInst = entry.isBullet ? bulletStatusInst : domeStatusInst;
+    const emissiveAttr = entry.isBullet ? bulletEmissiveAttr : domeEmissiveAttr;
+
+    if (bodyInst) {
+      bodyInst.setColorAt(entry.instanceIdx, tmpColor.set(style.bodyColor));
+      if (bodyInst.instanceColor) bodyInst.instanceColor.needsUpdate = true;
+    }
+    if (statusInst && emissiveAttr) {
+      statusInst.setColorAt(entry.instanceIdx, tmpColor.set(style.color));
+      if (statusInst.instanceColor) statusInst.instanceColor.needsUpdate = true;
+      tmpEmissive.set(style.emissive);
+      emissiveAttr.setXYZ(
+        entry.instanceIdx,
+        tmpEmissive.r * style.emissiveIntensity,
+        tmpEmissive.g * style.emissiveIntensity,
+        tmpEmissive.b * style.emissiveIntensity
+      );
+      emissiveAttr.needsUpdate = true;
+    }
 
     entry.fillMat.color.set(style.fovColor);
     entry.fillMat.opacity = style.fovOpacity;
@@ -686,6 +871,103 @@ export function buildCameraAndFovLayers() {
       entry.beaconMat.color.set(style.color);
     }
   }
+
+  function applyNvrVisuals(nvr) {
+    if (nvrLedInst && nvrEmissiveAttr) {
+      if (nvr.isOffline) {
+        nvrLedInst.setColorAt(nvr.instanceIdx, tmpColor.set('#ef4444'));
+        tmpEmissive.set('#dc2626');
+        nvrEmissiveAttr.setXYZ(nvr.instanceIdx, tmpEmissive.r * 3.2, tmpEmissive.g * 3.2, tmpEmissive.b * 3.2);
+      } else {
+        nvrLedInst.setColorAt(nvr.instanceIdx, tmpColor.set('#10b981'));
+        tmpEmissive.set('#10b981');
+        nvrEmissiveAttr.setXYZ(nvr.instanceIdx, tmpEmissive.r * 1.85, tmpEmissive.g * 1.85, tmpEmissive.b * 1.85);
+      }
+      if (nvrLedInst.instanceColor) nvrLedInst.instanceColor.needsUpdate = true;
+      nvrEmissiveAttr.needsUpdate = true;
+    }
+    nvr.faultRing.visible = nvr.isOffline;
+    nvr.faultBeacon.visible = nvr.isOffline;
+  }
+
+  function syncDynamicTransforms(explodeFactor) {
+    for (const [floorKey, grp] of floorStaticGroups.entries()) {
+      grp.position.y = getFloorExplodeOffset(floorKey, explodeFactor);
+    }
+
+    for (const entry of cameraMap.values()) {
+      const dy = entry.config.isIndoor
+        ? getFloorExplodeOffset(entry.config.floor, explodeFactor)
+        : 0;
+      const x = entry.config.position[0];
+      const y = entry.baseY + dy;
+      const z = entry.config.position[2];
+
+      entry.head.position.y = y;
+      entry.fovGrp.position.y = y;
+
+      if (entry.isBullet) {
+        tmpObj.position.set(x, y, z);
+        tmpObj.rotation.order = 'YXZ';
+        tmpObj.rotation.set(-entry.config.pitch, entry.config.yaw, 0);
+        tmpObj.scale.set(1, 1, 1);
+        tmpObj.updateMatrix();
+        if (bulletBodyInst) bulletBodyInst.setMatrixAt(entry.instanceIdx, tmpObj.matrix);
+
+        if (bulletStatusInst) {
+          tmpLocalObj.position.set(0, -0.01, 0.54);
+          tmpLocalObj.rotation.set(0, 0, 0);
+          tmpLocalObj.scale.set(1, 1, 1);
+          tmpLocalObj.updateMatrix();
+          tmpMat.multiplyMatrices(tmpObj.matrix, tmpLocalObj.matrix);
+          bulletStatusInst.setMatrixAt(entry.instanceIdx, tmpMat);
+        }
+      } else {
+        tmpObj.rotation.order = 'XYZ';
+        tmpObj.rotation.set(0, 0, 0);
+        tmpObj.scale.set(1, 1, 1);
+        if (domeCollarInst) {
+          tmpObj.position.set(x, y + 0.16, z);
+          tmpObj.updateMatrix();
+          domeCollarInst.setMatrixAt(entry.instanceIdx, tmpObj.matrix);
+        }
+        if (domeStatusInst) {
+          tmpObj.position.set(x, y + 0.08, z);
+          tmpObj.updateMatrix();
+          domeStatusInst.setMatrixAt(entry.instanceIdx, tmpObj.matrix);
+        }
+      }
+    }
+
+    for (const nvr of nvrMap.values()) {
+      const dy = getFloorExplodeOffset(nvr.config.floor, explodeFactor);
+      const y = nvr.baseY + dy;
+      nvr.nodeGrp.position.y = y;
+
+      if (nvrLedInst) {
+        tmpObj.position.set(
+          nvr.config.nodePosition[0] + 0.28,
+          y + 1.32,
+          nvr.config.nodePosition[2] + 0.59
+        );
+        tmpObj.rotation.set(0, 0, 0);
+        tmpObj.scale.set(1, 1, 1);
+        tmpObj.updateMatrix();
+        nvrLedInst.setMatrixAt(nvr.instanceIdx, tmpObj.matrix);
+      }
+    }
+
+    if (bulletBodyInst) bulletBodyInst.instanceMatrix.needsUpdate = true;
+    if (domeCollarInst) domeCollarInst.instanceMatrix.needsUpdate = true;
+    if (bulletStatusInst) bulletStatusInst.instanceMatrix.needsUpdate = true;
+    if (domeStatusInst) domeStatusInst.instanceMatrix.needsUpdate = true;
+    if (nvrLedInst) nvrLedInst.instanceMatrix.needsUpdate = true;
+  }
+
+  // 初始化全部摄像头与 NVR 的初始矩阵、颜色与自发光属性
+  for (const entry of cameraMap.values()) applyStateVisuals(entry, entry.state);
+  for (const nvr of nvrMap.values()) applyNvrVisuals(nvr);
+  syncDynamicTransforms(0);
 
   let currentExplodeFactor = 0;
 
@@ -704,20 +986,7 @@ export function buildCameraAndFovLayers() {
       const nvr = nvrMap.get(nvrId);
       if (!nvr) return false;
       nvr.isOffline = Boolean(isOffline);
-
-      if (nvr.isOffline) {
-        nvr.ledMat.color.set('#ef4444');
-        nvr.ledMat.emissive.set('#dc2626');
-        nvr.ledMat.emissiveIntensity = 3.2;
-        nvr.faultRing.visible = true;
-        nvr.faultBeacon.visible = true;
-      } else {
-        nvr.ledMat.color.set('#10b981');
-        nvr.ledMat.emissive.set('#10b981');
-        nvr.ledMat.emissiveIntensity = 1.85;
-        nvr.faultRing.visible = false;
-        nvr.faultBeacon.visible = false;
-      }
+      applyNvrVisuals(nvr);
 
       // 收敛联动：该 NVR 下属全部摄像头一键置灰 / 恢复原状态
       for (const entry of cameraMap.values()) {
@@ -737,18 +1006,7 @@ export function buildCameraAndFovLayers() {
     },
     syncExplosion(explodeFactor) {
       currentExplodeFactor = explodeFactor;
-      for (const entry of cameraMap.values()) {
-        const dy = entry.config.isIndoor
-          ? getFloorExplodeOffset(entry.config.floor, explodeFactor)
-          : 0;
-        const y = entry.baseY + dy;
-        entry.head.position.y = y;
-        entry.fovGrp.position.y = y;
-      }
-      for (const nvr of nvrMap.values()) {
-        const dy = getFloorExplodeOffset(nvr.config.floor, explodeFactor);
-        nvr.nodeGrp.position.y = nvr.baseY + dy;
-      }
+      syncDynamicTransforms(explodeFactor);
     },
     getCameraWorldPosition(cameraId) {
       const entry = cameraMap.get(cameraId);
