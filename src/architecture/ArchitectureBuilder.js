@@ -1082,126 +1082,6 @@ export function buildArchitecture(maxAnisotropy = 16) {
 
   root.add(floor1, floor2, floor3, roofGroup, canopyGroup);
 
-  // 五层顺序索引与单层聚焦/上层幽灵化支持（零合批破坏、仅复用 1 枚亚克力幽灵材质）
-  const layerOrder = [
-    { key: '1F', group: floor1 },
-    { key: '2F', group: floor2 },
-    { key: '3F', group: floor3 },
-    { key: 'roof', group: roofGroup },
-    { key: 'floatingCanopy', group: canopyGroup },
-  ];
-  const layerIdxMap = new Map(layerOrder.map((item, idx) => [item.key, idx]));
-
-  const ghostShellMat = new THREE.MeshStandardMaterial({
-    color: '#cbd5e1',
-    emissive: new THREE.Color('#38bdf8'),
-    emissiveIntensity: 0.06,
-    roughness: 0.35,
-    metalness: 0.08,
-    transparent: true,
-    opacity: 0.075,
-    depthWrite: false,
-    side: THREE.FrontSide,
-  });
-
-  const glowMatSet = new Set([
-    materials.nightWindowGlow,
-    materials.interiorLightMat,
-    materials.labCeilingLightMat,
-    materials.warmAmberLightMat,
-    materials.portalFloorPoolMat,
-    materials.fireStripMat,
-    materials.auditoriumScreenMat,
-    materials.serverLedMat,
-  ]);
-
-  const layerMeshRecords = new Map();
-  for (const { key, group } of layerOrder) {
-    const records = [];
-    group.traverse((obj) => {
-      if (!obj.isMesh) return;
-      const isGlow = Array.isArray(obj.material)
-        ? obj.material.some((m) => glowMatSet.has(m))
-        : glowMatSet.has(obj.material);
-      records.push({
-        mesh: obj,
-        origMaterial: obj.material,
-        origVisible: obj.visible,
-        origCastShadow: obj.castShadow,
-        origReceiveShadow: obj.receiveShadow,
-        isGlow,
-      });
-    });
-    layerMeshRecords.set(key, records);
-  }
-
-  let focusedFloor = 'all';
-  let focusedGhostUpper = true;
-
-  function applyLayerMode(key, mode) {
-    const item = layerOrder[layerIdxMap.get(key)];
-    const records = layerMeshRecords.get(key);
-    if (!item || !records) return;
-
-    if (mode === 'hidden') {
-      item.group.visible = false;
-      return;
-    }
-
-    item.group.visible = true;
-    if (mode === 'solid') {
-      for (let i = 0; i < records.length; i++) {
-        const rec = records[i];
-        rec.mesh.material = rec.origMaterial;
-        rec.mesh.visible = rec.origVisible;
-        rec.mesh.castShadow = rec.origCastShadow;
-        rec.mesh.receiveShadow = rec.origReceiveShadow;
-      }
-      return;
-    }
-
-    // 'ghost': 上层轻量化透明建筑轮廓壳，关闭阴影投射以让日光直射被聚焦楼层内部
-    for (let i = 0; i < records.length; i++) {
-      const rec = records[i];
-      if (rec.isGlow) {
-        rec.mesh.visible = false;
-      } else {
-        rec.mesh.visible = rec.origVisible;
-        rec.mesh.material = ghostShellMat;
-        rec.mesh.castShadow = false;
-        rec.mesh.receiveShadow = false;
-      }
-    }
-  }
-
-  function focusFloor(floor = 'all', options = {}) {
-    const valid = layerIdxMap.has(floor) ? floor : 'all';
-    const ghostUpper = options.ghostUpper !== undefined ? Boolean(options.ghostUpper) : true;
-    focusedFloor = valid;
-    focusedGhostUpper = ghostUpper;
-
-    if (valid === 'all') {
-      for (const { key } of layerOrder) {
-        applyLayerMode(key, 'solid');
-      }
-      return focusedFloor;
-    }
-
-    const targetIdx = layerIdxMap.get(valid);
-    for (let i = 0; i < layerOrder.length; i++) {
-      const { key } = layerOrder[i];
-      if (i <= targetIdx) {
-        applyLayerMode(key, 'solid');
-      } else if (ghostUpper && i === targetIdx + 1 && key !== 'roof' && key !== 'floatingCanopy') {
-        // 仅紧邻上一楼层保留极轻亚克力幽灵壳，屋顶/顶棚隐藏以确保俯视室内无遮挡
-        applyLayerMode(key, 'ghost');
-      } else {
-        applyLayerMode(key, 'hidden');
-      }
-    }
-    return focusedFloor;
-  }
-
   // 平滑垂直爆炸透视状态机
   let explodeFactor = 0;
   let targetExplode = 0;
@@ -1229,30 +1109,11 @@ export function buildArchitecture(maxAnisotropy = 16) {
     setExploded(enabled) {
       targetExplode = enabled ? 1 : 0;
     },
-    setExplodeFactor(factor) {
-      const clamped = Math.max(0, Math.min(1, Number(factor) || 0));
-      targetExplode = clamped;
-      return targetExplode;
-    },
     getExplodeFactor() {
       return explodeFactor;
     },
-    getTargetExplode() {
-      return targetExplode;
-    },
     isExploded() {
       return targetExplode > 0.5;
-    },
-    focusFloor,
-    getFocusedFloor() {
-      return focusedFloor;
-    },
-    isFloorInteractive(floorKey) {
-      if (focusedFloor === 'all') return true;
-      const targetIdx = layerIdxMap.get(focusedFloor);
-      const checkIdx = layerIdxMap.get(floorKey);
-      if (targetIdx === undefined || checkIdx === undefined) return true;
-      return checkIdx <= targetIdx;
     },
     setDuskFactor(dusk, night = dusk) {
       currentDusk = dusk;
@@ -1283,12 +1144,6 @@ export function buildArchitecture(maxAnisotropy = 16) {
       materials.portalFloorPoolMat.visible = glowActive;
       materials.portalFloorPoolMat.opacity = dusk * 0.42 + night * 0.16;
 
-      // 幽灵切剖外壳昼夜自适应微调
-      const dark = Math.max(dusk, night);
-      ghostShellMat.color.set(dark > 0.35 ? '#64748b' : '#cbd5e1');
-      ghostShellMat.emissiveIntensity = THREE.MathUtils.lerp(0.06, 0.28, dark);
-      ghostShellMat.opacity = THREE.MathUtils.lerp(0.075, 0.095, dark);
-
       syncNightWindowGlow();
     },
     update(dt) {
@@ -1308,9 +1163,6 @@ export function buildArchitecture(maxAnisotropy = 16) {
         syncNightWindowGlow();
       }
       return explodeFactor;
-    },
-    dispose() {
-      ghostShellMat.dispose();
     },
   };
 }

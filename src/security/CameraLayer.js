@@ -65,28 +65,8 @@ const STATE_STYLES = {
 
 /**
  * 构造单路真实风格 3D 枪机（bullet）或球机（dome）头部组件
- * 共享静态几何与光学镜片材质，移除冗余材质分配
  */
-function createSharedCameraAssets() {
-  return {
-    lensGlassMat: new THREE.MeshStandardMaterial({
-      color: '#1e293b',
-      roughness: 0.08,
-      metalness: 0.35,
-      envMapIntensity: 1.5,
-    }),
-    bulletHousingGeo: new THREE.BoxGeometry(0.48, 0.42, 1.08),
-    bulletLensGeo: new THREE.CylinderGeometry(0.15, 0.17, 0.24, 10),
-    bulletRingGeo: new THREE.TorusGeometry(0.24, 0.045, 6, 14),
-    domeCollarGeo: new THREE.CylinderGeometry(0.42, 0.36, 0.24, 12),
-    domeSphereGeo: new THREE.SphereGeometry(0.35, 12, 8, 0, Math.PI * 2, Math.PI * 0.42, Math.PI * 0.58),
-    domeRingGeo: new THREE.TorusGeometry(0.43, 0.055, 6, 16),
-    pulseRingGeo: new THREE.RingGeometry(1.15, 1.85, 28),
-    beaconGeo: new THREE.CylinderGeometry(0.16, 0.58, 13.5, 12, 1, true),
-  };
-}
-
-function buildCameraHead(camCfg, shared) {
+function buildCameraHead(camCfg) {
   const head = new THREE.Group();
   head.name = `CamHead_${camCfg.id}`;
 
@@ -94,6 +74,17 @@ function buildCameraHead(camCfg, shared) {
     color: STATE_STYLES.online.bodyColor,
     roughness: 0.32,
     metalness: 0.45,
+  });
+  const darkMat = new THREE.MeshStandardMaterial({
+    color: '#1f2937',
+    roughness: 0.25,
+    metalness: 0.72,
+  });
+  const lensGlassMat = new THREE.MeshStandardMaterial({
+    color: '#1e293b',
+    roughness: 0.08,
+    metalness: 0.35,
+    envMapIntensity: 1.5,
   });
   const statusMat = new THREE.MeshStandardMaterial({
     color: STATE_STYLES.online.color,
@@ -110,28 +101,31 @@ function buildCameraHead(camCfg, shared) {
 
   if (camCfg.type === 'bullet') {
     // 精简高效枪机（机身 + 光学镜头筒 + 环形状态灯，3 次 Draw Call/路）
-    const housing = new THREE.Mesh(shared.bulletHousingGeo, bodyMat);
+    const housing = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.42, 1.08), bodyMat);
     aimGroup.add(housing);
 
-    const lens = new THREE.Mesh(shared.bulletLensGeo, shared.lensGlassMat);
+    const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.17, 0.24, 10), lensGlassMat);
     lens.rotation.x = Math.PI / 2;
     lens.position.set(0, 0, 0.56);
     aimGroup.add(lens);
 
-    const ring = new THREE.Mesh(shared.bulletRingGeo, statusMat);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.045, 6, 14), statusMat);
     ring.position.set(0, 0, 0.53);
     aimGroup.add(ring);
   } else {
     // 精简高效球机（吊装底座 + 熏黑球罩 + 环形状态灯）
-    const collar = new THREE.Mesh(shared.domeCollarGeo, bodyMat);
+    const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.36, 0.24, 12), bodyMat);
     collar.position.y = 0.22;
     head.add(collar);
 
-    const dome = new THREE.Mesh(shared.domeSphereGeo, shared.lensGlassMat);
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(0.35, 12, 8, 0, Math.PI * 2, Math.PI * 0.42, Math.PI * 0.58),
+      lensGlassMat
+    );
     dome.position.y = 0.12;
     head.add(dome);
 
-    const statusRing = new THREE.Mesh(shared.domeRingGeo, statusMat);
+    const statusRing = new THREE.Mesh(new THREE.TorusGeometry(0.43, 0.055, 6, 16), statusMat);
     statusRing.rotation.x = Math.PI / 2;
     statusRing.position.y = 0.11;
     head.add(statusRing);
@@ -147,7 +141,7 @@ function buildCameraHead(camCfg, shared) {
     side: THREE.DoubleSide,
     depthWrite: false,
   });
-  const pulseRing = new THREE.Mesh(shared.pulseRingGeo, pulseMat);
+  const pulseRing = new THREE.Mesh(new THREE.RingGeometry(1.15, 1.85, 28), pulseMat);
   pulseRing.rotation.x = -Math.PI / 2;
   pulseRing.position.y = 0.2;
   pulseRing.visible = false;
@@ -160,7 +154,7 @@ function buildCameraHead(camCfg, shared) {
     opacity: 0.52,
     depthWrite: false,
   });
-  const beacon = new THREE.Mesh(shared.beaconGeo, beaconMat);
+  const beacon = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.58, 13.5, 12, 1, true), beaconMat);
   beacon.position.y = 7.0;
   beacon.visible = false;
   head.add(beacon);
@@ -273,16 +267,14 @@ export function buildCameraAndFovLayers() {
   }
 
   // 2. 构建 12 路摄像头实体与对应视锥映射表
-  const sharedCameraAssets = createSharedCameraAssets();
   const cameraMap = new Map();
   for (const cfg of SECURITY_CAMERAS) {
-    const headBundle = buildCameraHead(cfg, sharedCameraAssets);
+    const headBundle = buildCameraHead(cfg);
     headBundle.head.position.set(...cfg.position);
     camerasGroup.add(headBundle.head);
 
     const fovBundle = buildCameraFovFrustum(cfg);
     fovBundle.fovGrp.position.set(...cfg.position);
-    fovBundle.fovGrp.visible = false;
     fovGroup.add(fovBundle.fovGrp);
 
     cameraMap.set(cfg.id, {
@@ -294,35 +286,6 @@ export function buildCameraAndFovLayers() {
       ...fovBundle,
     });
   }
-
-  // 2b. 复用单枚摄像头头部悬浮/选中光环（0 冗余 per-camera 网格分配，仅激活时 visible = true）
-  const headReticleGeo = new THREE.RingGeometry(0.75, 1.08, 28);
-  headReticleGeo.rotateX(-Math.PI / 2);
-  const hoverHeadRingMat = new THREE.MeshBasicMaterial({
-    color: '#38bdf8',
-    transparent: true,
-    opacity: 0.78,
-    side: THREE.DoubleSide,
-    depthWrite: false,
-  });
-  const hoverHeadRing = new THREE.Mesh(headReticleGeo, hoverHeadRingMat);
-  hoverHeadRing.visible = false;
-  hoverHeadRing.renderOrder = 16;
-  camerasGroup.add(hoverHeadRing);
-
-  const selectHeadRingGeo = new THREE.RingGeometry(0.88, 1.32, 32);
-  selectHeadRingGeo.rotateX(-Math.PI / 2);
-  const selectHeadRingMat = new THREE.MeshBasicMaterial({
-    color: '#0284c7',
-    transparent: true,
-    opacity: 0.92,
-    side: THREE.DoubleSide,
-    depthWrite: false,
-  });
-  const selectHeadRing = new THREE.Mesh(selectHeadRingGeo, selectHeadRingMat);
-  selectHeadRing.visible = false;
-  selectHeadRing.renderOrder = 17;
-  camerasGroup.add(selectHeadRing);
 
   // 3. 东北机房 3 台大华 NVR 汇聚节点状态灯与故障告警标识
   const nvrMap = new Map();
@@ -400,107 +363,15 @@ export function buildCameraAndFovLayers() {
   }
 
   let currentExplodeFactor = 0;
-  let globalFovVisible = false;
-  let fovOverrideId = null;
-  let hoveredCameraId = null;
-  let selectedCameraId = null;
-
-  function syncFovVisibility() {
-    fovGroup.visible = globalFovVisible || Boolean(fovOverrideId);
-    for (const [id, entry] of cameraMap.entries()) {
-      const isOverride = id === fovOverrideId;
-      entry.fovGrp.visible = globalFovVisible || isOverride;
-      const style = STATE_STYLES[entry.state] || STATE_STYLES.online;
-      if (isOverride && !globalFovVisible) {
-        entry.fillMat.opacity = Math.max(style.fovOpacity, 0.24);
-        entry.edgeMat.opacity = 0.88;
-      } else {
-        entry.fillMat.opacity = style.fovOpacity;
-        entry.edgeMat.opacity = 0.72;
-      }
-    }
-  }
-
-  function syncHeadFocusRings() {
-    // 还原各摄像头头部尺度与状态灯强度
-    for (const [id, entry] of cameraMap.entries()) {
-      const style = STATE_STYLES[entry.state] || STATE_STYLES.online;
-      const isSel = id === selectedCameraId;
-      const isHov = id === hoveredCameraId;
-      const scale = isSel ? 1.32 : isHov ? 1.18 : 1.0;
-      entry.head.scale.setScalar(scale);
-      entry.statusMat.emissiveIntensity =
-        style.emissiveIntensity + (isSel ? 1.35 : isHov ? 0.75 : 0);
-    }
-
-    const selEntry = selectedCameraId ? cameraMap.get(selectedCameraId) : null;
-    if (selEntry) {
-      selectHeadRing.position.copy(selEntry.head.position);
-      selectHeadRing.position.y += 0.16;
-      const style = STATE_STYLES[selEntry.state] || STATE_STYLES.online;
-      selectHeadRingMat.color.set(
-        selEntry.state === 'alarm_critical'
-          ? '#ef4444'
-          : selEntry.state === 'alarm_order'
-            ? '#f59e0b'
-            : selEntry.state === 'offline'
-              ? '#64748b'
-              : '#38bdf8'
-      );
-      selectHeadRing.visible = true;
-    } else {
-      selectHeadRing.visible = false;
-    }
-
-    const hovEntry =
-      hoveredCameraId && hoveredCameraId !== selectedCameraId
-        ? cameraMap.get(hoveredCameraId)
-        : null;
-    if (hovEntry) {
-      hoverHeadRing.position.copy(hovEntry.head.position);
-      hoverHeadRing.position.y += 0.14;
-      hoverHeadRing.visible = true;
-    } else {
-      hoverHeadRing.visible = false;
-    }
-  }
 
   return {
     camerasGroup,
     fovGroup,
-    setGlobalFovVisible(visible) {
-      globalFovVisible = Boolean(visible);
-      syncFovVisibility();
-      return globalFovVisible;
-    },
-    isGlobalFovVisible() {
-      return globalFovVisible;
-    },
-    setCameraFovOverride(cameraId) {
-      fovOverrideId = cameraId && cameraMap.has(cameraId) ? cameraId : null;
-      syncFovVisibility();
-      return fovOverrideId;
-    },
-    getCameraFovOverride() {
-      return fovOverrideId;
-    },
-    setHoveredCamera(cameraId) {
-      hoveredCameraId = cameraId && cameraMap.has(cameraId) ? cameraId : null;
-      syncHeadFocusRings();
-      return hoveredCameraId;
-    },
-    setSelectedCamera(cameraId) {
-      selectedCameraId = cameraId && cameraMap.has(cameraId) ? cameraId : null;
-      syncHeadFocusRings();
-      return selectedCameraId;
-    },
     setCameraState(cameraId, state) {
       const entry = cameraMap.get(cameraId);
       if (!entry) return false;
       if (!STATE_STYLES[state]) return false;
       applyStateVisuals(entry, state);
-      syncFovVisibility();
-      syncHeadFocusRings();
       return true;
     },
     setNvrOffline(nvrId, isOffline) {
@@ -536,16 +407,7 @@ export function buildCameraAndFovLayers() {
           applyStateVisuals(entry, restore);
         }
       }
-      syncFovVisibility();
-      syncHeadFocusRings();
       return true;
-    },
-    isNvrOffline(nvrId) {
-      const nvr = nvrMap.get(nvrId);
-      return nvr ? Boolean(nvr.isOffline) : false;
-    },
-    getNvrEntry(nvrId) {
-      return nvrMap.get(nvrId) || null;
     },
     syncExplosion(explodeFactor) {
       currentExplodeFactor = explodeFactor;
@@ -561,7 +423,6 @@ export function buildCameraAndFovLayers() {
         const dy = getFloorExplodeOffset(nvr.config.floor, explodeFactor);
         nvr.nodeGrp.position.y = nvr.baseY + dy;
       }
-      syncHeadFocusRings();
     },
     getCameraWorldPosition(cameraId) {
       const entry = cameraMap.get(cameraId);
