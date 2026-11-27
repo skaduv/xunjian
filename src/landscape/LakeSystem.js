@@ -531,29 +531,29 @@ function createOpticalWaterMaterial(waterNormalTex, shoreField) {
     uShoreSdfMap: { value: shoreField.texture },
     uWaterNormalMap: { value: waterNormalTex },
     uLakeBounds: { value: shoreField.bounds },
-    // 晶莹玉青树脂微缩水体日间默认色阶（对齐 Art Spec #9）
-    uShallowCol: { value: new THREE.Color('#6ec4be') },
-    uMidCol: { value: new THREE.Color('#2c838f') },
-    uDeepCol: { value: new THREE.Color('#1d5664') },
-    uSkyReflCol: { value: new THREE.Color('#d8ecf0') },
-    uMeniscusCol: { value: new THREE.Color('#c2f0f2') },
-    uGlintCol: { value: new THREE.Color('#fff5e4') },
-    uSunDir: { value: new THREE.Vector3(-205, 255, 170).normalize() },
+    // 深邃莹润航拍翠青湖泊日间默认色阶（对齐无边界云雾绿野规范 #38 与航拍参考图）
+    uShallowCol: { value: new THREE.Color('#2b6e6d') },
+    uMidCol: { value: new THREE.Color('#1c4f5c') },
+    uDeepCol: { value: new THREE.Color('#133946') },
+    uSkyReflCol: { value: new THREE.Color('#d2e4df') },
+    uMeniscusCol: { value: new THREE.Color('#8ec7c2') },
+    uGlintCol: { value: new THREE.Color('#fff3db') },
+    uSunDir: { value: new THREE.Vector3(-265, 205, 165).normalize() },
     uIslandsPosRot: { value: islandPosRot },
     uIslandsRadii: { value: islandRadii },
   };
 
   const waterMat = new THREE.MeshStandardMaterial({
     color: '#ffffff',
-    roughness: 0.085,
-    metalness: 0.14,
+    roughness: 0.068,
+    metalness: 0.18,
     transparent: true,
-    opacity: 0.9,
-    envMapIntensity: 1.35,
+    opacity: 0.92,
+    envMapIntensity: 1.5,
     depthWrite: false,
   });
 
-  waterMat.customProgramCacheKey = () => 'ioply-optical-lake-water-v2-crystal';
+  waterMat.customProgramCacheKey = () => 'ioply-optical-lake-water-v3-emerald-aerial';
 
   waterMat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
@@ -694,34 +694,34 @@ function createOpticalWaterMaterial(waterNormalTex, shoreField) {
         float lakeShoreDist = min( wallDist, max( 0.0, lakeIslDist ) );
         lakeShoreDist = mix( lakeShoreDist, max( 0.0, vShoreDist ), 0.015 );
 
-        // Beer-Lambert 连续晶透树脂光学水深渐变（清透翡翠浅岸 -> 玉青中水 -> 深邃青碧湖心）
+        // Beer-Lambert 连续航拍光学水深渐变（清透翠玉浅岸 -> 深青碧中水 -> 深邃黛青蓝湖心）
         float organicMod = 0.055 * sin( lakeXz.x * 0.028 + lakeXz.y * 0.022 )
                          + 0.040 * cos( lakeXz.x * 0.019 - lakeXz.y * 0.034 );
-        float tShallowMid = 1.0 - exp( -lakeShoreDist / 5.4 );
-        float tMidDeep = 1.0 - exp( -lakeShoreDist / 16.5 );
+        float tShallowMid = 1.0 - exp( -lakeShoreDist / 4.8 );
+        float tMidDeep = 1.0 - exp( -lakeShoreDist / 14.5 );
         float shallowMix = smoothstep( 0.0, 1.0, clamp( tShallowMid + organicMod * tShallowMid, 0.0, 1.0 ) );
-        float deepMix = smoothstep( 0.05, 1.0, clamp( tMidDeep + organicMod * 0.45, 0.0, 1.0 ) );
+        float deepMix = smoothstep( 0.04, 1.0, clamp( tMidDeep + organicMod * 0.45, 0.0, 1.0 ) );
 
         vec3 waterBodyCol = mix( uShallowCol, uMidCol, shallowMix );
-        waterBodyCol = mix( waterBodyCol, uDeepCol, deepMix * 0.88 );
+        waterBodyCol = mix( waterBodyCol, uDeepCol, deepMix * 0.92 );
 
-        // 浅岸 0–4m 极细腻晶透水底柔和焦散明度微提（仅日间呈现高端亚克力/环氧树脂通透感）
+        // 浅岸 0–4m 清透翠玉水底柔和焦散明度微提（克制自然，不泛白发青）
         float dayWeight = 1.0 - max( uDuskFactor, uNightFactor );
-        float shallowGlowBand = ( 1.0 - smoothstep( 0.35, 4.2, lakeShoreDist ) ) * smoothstep( 0.0, 0.45, lakeShoreDist );
+        float shallowGlowBand = ( 1.0 - smoothstep( 0.35, 4.0, lakeShoreDist ) ) * smoothstep( 0.0, 0.45, lakeShoreDist );
         float causticSoft = lake_vnoise( lakeXz * 0.28 + vec2( uTime * 0.14, -uTime * 0.11 ) );
-        waterBodyCol += vec3( 0.045, 0.105, 0.105 ) * shallowGlowBand * ( 0.45 + 0.55 * causticSoft ) * dayWeight;
+        waterBodyCol += vec3( 0.022, 0.068, 0.062 ) * shallowGlowBand * ( 0.45 + 0.55 * causticSoft ) * dayWeight;
 
-        // 驳岸挑檐压顶 & 浮岛下缘扎实接触暗影（强化立体微缩体量感）
-        float shoreContactAO = mix( 0.74, 1.0, smoothstep( 0.0, 0.72, lakeShoreDist ) );
-        float islContactAO = mix( 0.72, 1.0, smoothstep( 0.0, 0.95, max( 0.0, lakeIslDist ) ) );
+        // 驳岸挑檐压顶 & 浮岛下缘扎实接触暗影（强化立体岸线层次）
+        float shoreContactAO = mix( 0.70, 1.0, smoothstep( 0.0, 0.78, lakeShoreDist ) );
+        float islContactAO = mix( 0.68, 1.0, smoothstep( 0.0, 1.0, max( 0.0, lakeIslDist ) ) );
         waterBodyCol *= shoreContactAO * islContactAO;
 
         // 白天临近 14.5m 高建筑立面的细微体量投影压暗
-        waterBodyCol *= ( 1.0 - dayWeight * lakeSdf.b * 0.075 );
+        waterBodyCol *= ( 1.0 - dayWeight * lakeSdf.b * 0.085 );
 
-        // Beer-Lambert 连续晶透透明度：浅岸 0.72 透见水下石阶与岛基 -> 深水 0.945 温润半透玉质
-        float beerAlpha = mix( 0.72, 0.945, 1.0 - exp( -lakeShoreDist / 3.8 ) );
-        beerAlpha = mix( beerAlpha, min( 0.985, beerAlpha + 0.055 ), max( uDuskFactor, uNightFactor ) );
+        // Beer-Lambert 连续透明度：浅岸 0.78 透见水下石阶与岛基 -> 深水 0.96 深邃沉稳航拍水体
+        float beerAlpha = mix( 0.78, 0.96, 1.0 - exp( -lakeShoreDist / 3.6 ) );
+        beerAlpha = mix( beerAlpha, min( 0.985, beerAlpha + 0.045 ), max( uDuskFactor, uNightFactor ) );
 
         diffuseColor.rgb = waterBodyCol;
         diffuseColor.a = beerAlpha;
@@ -730,10 +730,10 @@ function createOpticalWaterMaterial(waterNormalTex, shoreField) {
       .replace(
         '#include <roughnessmap_fragment>',
         `#include <roughnessmap_fragment>
-        float meniscusRough = ( 1.0 - smoothstep( 0.0, 1.15, lakeShoreDist ) ) * 0.07;
-        float modeRough = mix( 0.085, 0.095, uDuskFactor );
+        float meniscusRough = ( 1.0 - smoothstep( 0.0, 1.15, lakeShoreDist ) ) * 0.065;
+        float modeRough = mix( 0.065, 0.088, uDuskFactor );
         modeRough = mix( modeRough, 0.125, uNightFactor );
-        roughnessFactor = clamp( modeRough + meniscusRough, 0.06, 0.26 );
+        roughnessFactor = clamp( modeRough + meniscusRough, 0.05, 0.25 );
         `
       )
       .replace(
@@ -747,33 +747,37 @@ function createOpticalWaterMaterial(waterNormalTex, shoreField) {
       .replace(
         '#include <opaque_fragment>',
         `
-        // 1. 物理菲涅尔（Schlick Fresnel）掠射棚拍柔光与天幕反射（克制不泛白，保留玉青水体饱和度）
+        // 1. 物理菲涅尔（Schlick Fresnel）掠射天光与流动云影反射（日间呈清润航拍水光，夜幕纯净沉静）
         vec3 lakeViewDir = normalize( cameraPosition - vWaterWorldPos );
         float lakeNdotV = clamp( dot( lakeWorldNormal, lakeViewDir ), 0.0, 1.0 );
-        float lakeFresnel = 0.03 + 0.97 * pow( 1.0 - lakeNdotV, 4.4 );
-        float reflStrength = mix( 0.36, 0.48, uDuskFactor );
+        float lakeFresnel = 0.035 + 0.965 * pow( 1.0 - lakeNdotV, 4.1 );
+        float cloudReflNoise = lake_vnoise( lakeXz * 0.011 + vec2( uTime * 0.008, -uTime * 0.005 ) ) * 0.65
+                             + lake_vnoise( lakeXz * 0.024 - vec2( uTime * 0.012, uTime * 0.006 ) ) * 0.35;
+        float cloudReflPatch = smoothstep( 0.44, 0.82, cloudReflNoise ) * dayWeight;
+        vec3 skyReflMod = mix( uSkyReflCol, uSkyReflCol * 1.16 + vec3( 0.04, 0.05, 0.05 ), cloudReflPatch * 0.45 );
+        float reflStrength = mix( 0.44, 0.48, uDuskFactor );
         reflStrength = mix( reflStrength, 0.40, uNightFactor );
-        outgoingLight = mix( outgoingLight, uSkyReflCol, lakeFresnel * reflStrength );
+        outgoingLight = mix( outgoingLight, skyReflMod, lakeFresnel * ( reflStrength + cloudReflPatch * 0.13 ) );
 
-        // 2. 日/月微澜丝绸镜面高光（夜间极克制柔月光，突出贴岸暖琥珀倒影、零银白斑驳）
+        // 2. 日/月微澜丝绸镜面高光（日间金辉轻跃，夜间极克制柔月光、零银白斑驳）
         vec3 lakeHalfVec = normalize( uSunDir + lakeViewDir );
         float specBroad = pow( max( dot( lakeWorldNormal, lakeHalfVec ), 0.0 ), 120.0 );
         float specSharp = pow( max( dot( lakeWorldNormal, lakeHalfVec ), 0.0 ), 460.0 );
-        float glintAmt = mix( 0.42, 0.48, uDuskFactor );
+        float glintAmt = mix( 0.48, 0.46, uDuskFactor );
         glintAmt = mix( glintAmt, 0.11, uNightFactor );
         outgoingLight += uGlintCol * ( specBroad * 0.14 + specSharp * 0.72 ) * glintAmt;
 
-        // 3. 精致磨砂冰青亲水半月面（0.0–1.25m 沿倒角暖石驳岸与生态岛轻柔贴合折射光边）
+        // 3. 精致清润翡翠亲水半月面（0.0–1.25m 沿倒角暖石驳岸与生态岛轻柔贴合折射光边）
         float shoreBreath = 0.12 * sin( uTime * 1.1 + lakeXz.x * 0.21 + lakeXz.y * 0.17 )
                           + 0.06 * cos( uTime * 0.78 - lakeXz.x * 0.29 + lakeXz.y * 0.25 );
         float mDist = max( 0.0, lakeShoreDist + shoreBreath );
         float meniscusCore = ( 1.0 - smoothstep( 0.03, 0.50, mDist ) ) * smoothstep( 0.0, 0.08, lakeShoreDist + 0.025 );
-        float meniscusHalo = ( 1.0 - smoothstep( 0.0, 1.20, mDist ) ) * 0.28;
+        float meniscusHalo = ( 1.0 - smoothstep( 0.0, 1.20, mDist ) ) * 0.26;
         float islRippleVis = ( 1.0 - smoothstep( 0.0, 2.7, max( 0.0, lakeIslDist ) ) )
                            * smoothstep( 0.0, 0.28, lakeIslDist )
                            * ( 0.5 + 0.5 * sin( lakeIslDist * 4.8 - uTime * 1.35 ) ) * 0.24;
-        float meniscusMask = clamp( meniscusCore * 0.52 + meniscusHalo + islRippleVis, 0.0, 0.78 );
-        float meniscusVis = mix( 0.50, 0.34, uDuskFactor );
+        float meniscusMask = clamp( meniscusCore * 0.50 + meniscusHalo + islRippleVis, 0.0, 0.74 );
+        float meniscusVis = mix( 0.38, 0.30, uDuskFactor );
         meniscusVis = mix( meniscusVis, 0.22, uNightFactor );
         outgoingLight = mix( outgoingLight, uMeniscusCol, meniscusMask * meniscusVis );
 
@@ -831,11 +835,11 @@ export function buildLakeSystem(maxAnisotropy = 8) {
 
   const lakeShape = pointsToShape(LAKE_SHORELINE);
 
-  // 1. 单层不透明深玉青防漏光湖底板（y = -2.20，与驳岸底及浮岛底座严密咬合，0 Z-Fighting）
+  // 1. 单层不透明深邃黛青防漏光湖底板（y = -2.20，与驳岸底及浮岛底座严密咬合，0 Z-Fighting）
   const basinGeo = new THREE.ShapeGeometry(lakeShape, 1);
   basinGeo.rotateX(-Math.PI / 2);
   const basinMat = new THREE.MeshStandardMaterial({
-    color: '#1f4a54',
+    color: '#0d2832',
     roughness: 0.9,
     metalness: 0.02,
   });
@@ -924,19 +928,56 @@ export function buildLakeSystem(maxAnisotropy = 8) {
 
   group.add(ashlarWallMesh, revealMesh, copingCapMesh);
 
-  // 4. 3 座扎根湖底的精工生态岛（InstancedMesh 控 Draw Call）+ 精准贴合杆顶芦苇丛（L1 修复）
-  const islandSubBaseMat = new THREE.MeshStandardMaterial({ color: '#58625d', roughness: 0.82, metalness: 0.04 });
-  const islandRimMat = new THREE.MeshStandardMaterial({ color: '#b4aba0', roughness: 0.62, metalness: 0.04 });
-  const islandSoilMat = new THREE.MeshStandardMaterial({ color: '#617d57', roughness: 0.86, metalness: 0.0 });
-  const reedStalkMat = new THREE.MeshStandardMaterial({ color: '#4d6c49', roughness: 0.80, metalness: 0.0 });
-  const reedPlumeMat = new THREE.MeshStandardMaterial({ color: '#c8ae7d', roughness: 0.78, metalness: 0.0 });
+  // 4. 3 座扎根湖底的精工生态岛（InstancedMesh 控 Draw Call）+ 丰茂深苔藓岛冠与精准贴合杆顶芦苇丛（L1 修复）
+  const islandSubBaseMat = new THREE.MeshStandardMaterial({ color: '#2c423b', roughness: 0.84, metalness: 0.04 });
+  const islandRimMat = new THREE.MeshStandardMaterial({ color: '#b2aaa0', roughness: 0.62, metalness: 0.04 });
+  const islandSoilMat = new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    roughness: 0.85,
+    metalness: 0.0,
+    envMapIntensity: 0.85,
+  });
+  const reedStalkMat = new THREE.MeshStandardMaterial({
+    color: '#ffffff',
+    roughness: 0.80,
+    metalness: 0.0,
+    envMapIntensity: 0.85,
+  });
+  const reedPlumeMat = new THREE.MeshStandardMaterial({
+    color: '#ccb57e',
+    roughness: 0.78,
+    metalness: 0.0,
+    envMapIntensity: 0.85,
+  });
 
   // 水下扎根湖底的石质锥台基础（y = -2.36 -> -0.52），避免晶透水面下显得漂浮
   const islandSubBaseGeo = new THREE.CylinderGeometry(1.04, 1.24, 1.84, 32);
   // 倒角暖石驳岸护圈（顶微收口呈精致倒角感）
   const islandRimGeo = new THREE.CylinderGeometry(0.98, 1.08, 0.44, 32);
-  // 微隆起的丰润苔藓生态土丘
+  // 微隆起的丰润深苔藓生态岛冠（顶点着色：外缘深苔绿 #2d612a -> 顶冠鲜翠绿 #437f36）
   const islandSoilGeo = new THREE.CylinderGeometry(0.84, 0.95, 0.36, 32);
+  {
+    const sPos = islandSoilGeo.attributes.position;
+    const sCol = new Float32Array(sPos.count * 3);
+    const mossDeep = new THREE.Color('#2d612a');
+    const mossCrown = new THREE.Color('#437f36');
+    const cTmp = new THREE.Color();
+    for (let i = 0; i < sPos.count; i++) {
+      const vx = sPos.getX(i);
+      const vy = sPos.getY(i);
+      const vz = sPos.getZ(i);
+      const r = Math.hypot(vx, vz);
+      const topMask = smoothstep(-0.14, 0.16, vy);
+      const centerMask = 1.0 - smoothstep(0.15, 0.88, r);
+      const mossPatch = (Math.sin(vx * 5.2 + vz * 4.1) * 0.5 + Math.cos(vx * 3.7 - vz * 6.3) * 0.5) * 0.07;
+      const blend = clamp(topMask * (0.48 + 0.52 * centerMask) + mossPatch, 0, 1);
+      cTmp.copy(mossDeep).lerp(mossCrown, blend);
+      sCol[i * 3] = cTmp.r;
+      sCol[i * 3 + 1] = cTmp.g;
+      sCol[i * 3 + 2] = cTmp.b;
+    }
+    islandSoilGeo.setAttribute('color', new THREE.BufferAttribute(sCol, 3));
+  }
 
   const islandSubBaseInst = new THREE.InstancedMesh(islandSubBaseGeo, islandSubBaseMat, FLOATING_ISLANDS.length);
   const islandRimInst = new THREE.InstancedMesh(islandRimGeo, islandRimMat, FLOATING_ISLANDS.length);
@@ -1001,6 +1042,9 @@ export function buildLakeSystem(maxAnisotropy = 8) {
 
   const reedEuler = new THREE.Euler(0, 0, 0, 'XYZ');
   const tipOffset = new THREE.Vector3();
+  const reedDeepCol = new THREE.Color('#3a7635');
+  const reedSunCol = new THREE.Color('#6ca34a');
+  const tmpReedCol = new THREE.Color();
 
   reedData.forEach((rd, idx) => {
     // 芦苇根部深插土丘表面 (-0.22) 以下 0.08m（baseY = -0.30）
@@ -1015,6 +1059,10 @@ export function buildLakeSystem(maxAnisotropy = 8) {
     dummy.updateMatrix();
     stalkInst.setMatrixAt(idx, dummy.matrix);
 
+    const reedTint = ((idx * 37) % 100) / 100;
+    tmpReedCol.copy(reedDeepCol).lerp(reedSunCol, reedTint * 0.72);
+    stalkInst.setColorAt(idx, tmpReedCol);
+
     // L1 精确修复：沿同一 Euler 姿态求取芦苇杆顶端世界坐标，令芦苇穗严密套在杆尖（内嵌 5cm 零脱离）
     tipOffset.set(0, rd.h * 0.5 + 0.14, 0).applyEuler(reedEuler);
     dummy.position.set(rd.wx + tipOffset.x, centerY + tipOffset.y, rd.wz + tipOffset.z);
@@ -1024,30 +1072,31 @@ export function buildLakeSystem(maxAnisotropy = 8) {
     plumeInst.setMatrixAt(idx, dummy.matrix);
   });
   stalkInst.instanceMatrix.needsUpdate = true;
+  if (stalkInst.instanceColor) stalkInst.instanceColor.needsUpdate = true;
   plumeInst.instanceMatrix.needsUpdate = true;
   group.add(stalkInst, plumeInst);
 
   // 5. 预分配日间 / 暮光 / 夜间调色板（update 内零堆内存分配！）
   const palettes = {
     day: {
-      shallow: new THREE.Color('#6ec4be'),
-      mid: new THREE.Color('#2c838f'),
-      deep: new THREE.Color('#1d5664'),
-      skyRefl: new THREE.Color('#d8ecf0'),
-      meniscus: new THREE.Color('#c2f0f2'),
-      glint: new THREE.Color('#fff5e4'),
-      basin: new THREE.Color('#1f4a54'),
-      sunDir: new THREE.Vector3(-205, 255, 170).normalize(),
-      envIntensity: 1.35,
+      shallow: new THREE.Color('#2b6e6d'),
+      mid: new THREE.Color('#1c4f5c'),
+      deep: new THREE.Color('#133946'),
+      skyRefl: new THREE.Color('#d2e4df'),
+      meniscus: new THREE.Color('#8ec7c2'),
+      glint: new THREE.Color('#fff3db'),
+      basin: new THREE.Color('#0d2832'),
+      sunDir: new THREE.Vector3(-265, 205, 165).normalize(),
+      envIntensity: 1.5,
     },
     dusk: {
-      shallow: new THREE.Color('#2d6c7e'),
-      mid: new THREE.Color('#1d4860'),
-      deep: new THREE.Color('#143348'),
-      skyRefl: new THREE.Color('#4f7ca8'),
-      meniscus: new THREE.Color('#7ab4c6'),
+      shallow: new THREE.Color('#1d4f5e'),
+      mid: new THREE.Color('#12364a'),
+      deep: new THREE.Color('#0c2436'),
+      skyRefl: new THREE.Color('#4a6d8e'),
+      meniscus: new THREE.Color('#5e90a4'),
       glint: new THREE.Color('#ffbe82'),
-      basin: new THREE.Color('#0f2636'),
+      basin: new THREE.Color('#091a28'),
       sunDir: new THREE.Vector3(-245, 96, 130).normalize(),
       envIntensity: 1.05,
     },
